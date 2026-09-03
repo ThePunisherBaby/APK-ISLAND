@@ -12,16 +12,7 @@ import android.util.Log
 
 class IslandNotificationListenerService : NotificationListenerService() {
 
-    companion object {
-        const val ACTION_MEDIA_UPDATE = "com.thepunisherbaby.apkisland.MEDIA_UPDATE"
-        const val EXTRA_TITLE = "title"
-        const val EXTRA_ARTIST = "artist"
-        const val EXTRA_IS_PLAYING = "is_playing"
-        const val EXTRA_PROGRESS = "progress"
-        const val EXTRA_ELAPSED = "elapsed"
-        const val EXTRA_REMAINING = "remaining"
-        const val EXTRA_PACKAGE_NAME = "package_name"
-    }
+
 
     private var mediaSessionManager: MediaSessionManager? = null
     private var activeController: MediaController? = null
@@ -32,7 +23,11 @@ class IslandNotificationListenerService : NotificationListenerService() {
             attachToController(controllers[0])
         } else {
             detachController()
-            sendMediaBroadcast("", "", false, 0f, "0:00", "0:00", "")
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.mediaData = com.thepunisherbaby.apkisland.ui.IslandMediaData()
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentArtwork = null
+            if (com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState == com.thepunisherbaby.apkisland.ui.IslandState.MUSIC_COMPACT) {
+                com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState = com.thepunisherbaby.apkisland.ui.IslandState.IDLE
+            }
         }
     }
 
@@ -95,26 +90,21 @@ class IslandNotificationListenerService : NotificationListenerService() {
             
         com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentArtwork = artwork
 
-        sendMediaBroadcast(
-            title, artist, isPlaying, progress,
-            formatTime(position),
-            if (duration > 0) "-${formatTime(duration - position)}" else "0:00",
-            packageName
+        com.thepunisherbaby.apkisland.ui.IslandStateHolder.mediaData = com.thepunisherbaby.apkisland.ui.IslandMediaData(
+            title = title,
+            artist = artist,
+            isPlaying = isPlaying,
+            progress = progress,
+            elapsed = formatTime(position),
+            remaining = if (duration > 0) "-${formatTime(duration - position)}" else "0:00",
+            packageName = packageName
         )
-    }
 
-    private fun sendMediaBroadcast(title: String, artist: String, isPlaying: Boolean, progress: Float, elapsed: String, remaining: String, packageName: String) {
-        val intent = Intent(ACTION_MEDIA_UPDATE).apply {
-            putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_ARTIST, artist)
-            putExtra(EXTRA_IS_PLAYING, isPlaying)
-            putExtra(EXTRA_PROGRESS, progress)
-            putExtra(EXTRA_ELAPSED, elapsed)
-            putExtra(EXTRA_REMAINING, remaining)
-            putExtra(EXTRA_PACKAGE_NAME, packageName)
+        if (isPlaying && com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState == com.thepunisherbaby.apkisland.ui.IslandState.IDLE) {
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState = com.thepunisherbaby.apkisland.ui.IslandState.MUSIC_COMPACT
+        } else if (!isPlaying && com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState == com.thepunisherbaby.apkisland.ui.IslandState.MUSIC_COMPACT) {
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState = com.thepunisherbaby.apkisland.ui.IslandState.IDLE
         }
-        sendBroadcast(intent)
-        Log.d("IslandNLS", "Media broadcast: $title - $artist playing=$isPlaying pkg=$packageName")
     }
 
     private fun formatTime(ms: Long): String {

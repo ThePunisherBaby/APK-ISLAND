@@ -47,38 +47,6 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
     override val viewModelStore: ViewModelStore
         get() = store
 
-    // Receptor de broadcasts de media del NotificationListenerService
-    private val mediaReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == IslandNotificationListenerService.ACTION_MEDIA_UPDATE) {
-                val title = intent.getStringExtra(IslandNotificationListenerService.EXTRA_TITLE) ?: ""
-                val artist = intent.getStringExtra(IslandNotificationListenerService.EXTRA_ARTIST) ?: ""
-                val isPlaying = intent.getBooleanExtra(IslandNotificationListenerService.EXTRA_IS_PLAYING, false)
-                val progress = intent.getFloatExtra(IslandNotificationListenerService.EXTRA_PROGRESS, 0f)
-                val elapsed = intent.getStringExtra(IslandNotificationListenerService.EXTRA_ELAPSED) ?: "0:00"
-                val remaining = intent.getStringExtra(IslandNotificationListenerService.EXTRA_REMAINING) ?: "0:00"
-                val packageName = intent.getStringExtra(IslandNotificationListenerService.EXTRA_PACKAGE_NAME) ?: ""
-
-                Log.d("IslandService", "Media recibido: $title - $artist playing=$isPlaying")
-
-                IslandStateHolder.mediaData = IslandMediaData(
-                    title = title,
-                    artist = artist,
-                    isPlaying = isPlaying,
-                    progress = progress,
-                    elapsed = elapsed,
-                    remaining = remaining,
-                    packageName = packageName
-                )
-
-                if (isPlaying && IslandStateHolder.currentState == IslandState.IDLE) {
-                    IslandStateHolder.currentState = IslandState.MUSIC_COMPACT
-                } else if (!isPlaying && IslandStateHolder.currentState == IslandState.MUSIC_COMPACT) {
-                    IslandStateHolder.currentState = IslandState.IDLE
-                }
-            }
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -88,13 +56,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         startForegroundNotification()
 
-        // Registrar receptor de broadcasts
-        val filter = IntentFilter(IslandNotificationListenerService.ACTION_MEDIA_UPDATE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(mediaReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(mediaReceiver, filter)
-        }
+
 
         if (Settings.canDrawOverlays(this)) {
             addIslandView()
@@ -164,7 +126,6 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
 
     override fun onDestroy() {
         super.onDestroy()
-        try { unregisterReceiver(mediaReceiver) } catch (_: Exception) {}
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         composeView?.let {
             windowManager.removeView(it)

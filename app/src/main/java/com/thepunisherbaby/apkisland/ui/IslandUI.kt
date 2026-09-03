@@ -121,7 +121,7 @@ fun IslandUI() {
     // TAMAÑO INICIAL FIJO PARA IDLE Y COMPACTO
     val targetW: Dp = when {
         isExpanded -> 340.dp
-        else       -> 120.dp   // píldora base única y estática para compact e idle
+        else       -> 100.dp   // píldora base única y estática (más pequeña)
     }
     val targetH: Dp = when {
         isExpanded -> 180.dp
@@ -264,7 +264,7 @@ private fun MusicCompactContent(data: IslandMediaData, artwork: android.graphics
         Spacer(Modifier.weight(1f))
         
         if (data.isPlaying) {
-            EqualizerBars(barCount = 3, barWidth = 3.dp, maxHeight = 16.dp, color = Color(0xFFFF375F))
+            EqualizerBars(barCount = 3, barWidth = 3.dp, maxHeight = 16.dp, color = Color(0xFF1DB954))
         } else {
             Spacer(Modifier.size(24.dp)) // mantener espacio
         }
@@ -321,7 +321,7 @@ private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphic
                 )
             }
             if (data.isPlaying) {
-                EqualizerBars(barCount = 5, barWidth = 3.dp, maxHeight = 22.dp, color = Color(0xFFFF375F))
+                EqualizerBars(barCount = 5, barWidth = 3.dp, maxHeight = 22.dp, color = Color(0xFF1DB954))
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -444,11 +444,18 @@ private fun LockAnimation() {
 @Composable
 private fun EqualizerBars(barCount: Int, barWidth: Dp, maxHeight: Dp, color: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "eq")
-    val phases = remember { List(barCount) { Random.nextInt(200, 600) } }
+    val phases = remember { List(barCount) { Random.nextInt(600, 1200) } }
     Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         phases.forEachIndexed { i, duration ->
-            val anim by infiniteTransition.animateFloat(0.2f, 1f, infiniteRepeatable(tween(duration, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "bar$i")
-            Box(modifier = Modifier.width(barWidth).height(maxHeight * anim).clip(RoundedCornerShape(50)).background(color))
+            val anim by infiniteTransition.animateFloat(0.2f, 1f, infiniteRepeatable(tween(duration, easing = LinearEasing), RepeatMode.Reverse), label = "bar$i")
+            Box(
+                modifier = Modifier
+                    .width(barWidth)
+                    .height(maxHeight * anim)
+                    .clip(RoundedCornerShape(50))
+                    .background(color)
+                    .blur(1.5.dp) // Morphing motion blur simulado
+            )
         }
     }
 }
