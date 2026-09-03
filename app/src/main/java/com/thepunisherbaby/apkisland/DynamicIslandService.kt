@@ -86,17 +86,28 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
             }
         }
 
+        // ── Pixel 8: Cámara frontal centrada ──
+        // El punch-hole del Pixel 8 está centrado horizontalmente
+        // y su centro vertical está a ~84px del borde superior absoluto.
+        // La píldora (36dp alto) debe quedar centrada en ese punto.
+        // 84px - (36dp≈~54px en xxhdpi) / 2 = ~57px offset desde top absoluto
+        val displayMetrics = resources.displayMetrics
+        val pillHeightPx = (36 * displayMetrics.density).toInt()
+        val cameraCenterY = (56 * displayMetrics.density).toInt() // centro del punch-hole Pixel 8
+        val offsetY = cameraCenterY - (pillHeightPx / 2)
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED, // 120Hz Hardware acceleration
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = 20 // TODO: Cargar Y y X de SharedPreferences/DataStore
+            y = offsetY
         }
 
         windowManager.addView(composeView, params)

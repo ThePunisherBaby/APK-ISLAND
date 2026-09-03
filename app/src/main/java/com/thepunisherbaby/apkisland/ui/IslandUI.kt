@@ -100,6 +100,65 @@ fun IslandUI() {
         scaleAnim.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow))
     }
 
+    // Color del glow que cambia según estado
+    val glowColor by animateColorAsState(
+        targetValue = when (state) {
+            IslandState.MUSIC_COMPACT, IslandState.MUSIC_EXPANDED -> Color(0x40FF375F)
+            IslandState.TIMER_COMPACT, IslandState.TIMER_EXPANDED -> Color(0x40FF9F0A)
+            IslandState.CALL_COMPACT, IslandState.CALL_EXPANDED   -> Color(0x4030D158)
+            IslandState.LOCK_ANIM                                  -> Color(0x40FFFFFF)
+            else                                                   -> Color(0x00000000) // Sin glow en IDLE
+        },
+        animationSpec = tween(500),
+        label = "glow"
+    )
+
+    // Contenedor exterior: dibuja el glow difuminado DETRÁS de la píldora
+    Box(
+        modifier = Modifier
+            .width(width + 16.dp)  // extra espacio para el resplandor
+            .height(height + 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Capas de glow difuminado (de más ancha/transparente a más estrecha/opaca)
+        Canvas(
+            modifier = Modifier
+                .width(width + 12.dp)
+                .height(height + 12.dp)
+        ) {
+            // Capa exterior (más difusa)
+            drawRoundRect(
+                color = glowColor.copy(alpha = glowColor.alpha * 0.3f),
+                cornerRadius = CornerRadius((corner + 8.dp).toPx()),
+                size = size
+            )
+        }
+        Canvas(
+            modifier = Modifier
+                .width(width + 6.dp)
+                .height(height + 6.dp)
+        ) {
+            // Capa intermedia
+            drawRoundRect(
+                color = glowColor.copy(alpha = glowColor.alpha * 0.5f),
+                cornerRadius = CornerRadius((corner + 4.dp).toPx()),
+                size = size
+            )
+        }
+        Canvas(
+            modifier = Modifier
+                .width(width + 2.dp)
+                .height(height + 2.dp)
+        ) {
+            // Capa interior (más nítida)
+            drawRoundRect(
+                color = glowColor.copy(alpha = glowColor.alpha * 0.8f),
+                cornerRadius = CornerRadius((corner + 1.dp).toPx()),
+                size = size
+            )
+        }
+
+        // ── La píldora real ──
     Box(
         modifier = Modifier
             .width(width)
@@ -156,6 +215,7 @@ fun IslandUI() {
             IslandState.CALL_EXPANDED  -> CallExpandedContent()
         }
     }
+    } // cierre del Box exterior (glow)
 }
 
 // ═══════════════════════════════════════════════════════════════════════
