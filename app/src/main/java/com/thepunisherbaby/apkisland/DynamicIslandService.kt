@@ -98,7 +98,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         // Su centro vertical está a ~56dp del borde superior absoluto.
         val displayMetrics = resources.displayMetrics
         val pillHeightPx = (36 * displayMetrics.density).toInt()
-        val cameraCenterY = (56 * displayMetrics.density).toInt()
+        val cameraCenterY = (24 * displayMetrics.density).toInt() // centro del punch-hole Pixel 8
         val offsetY = cameraCenterY - (pillHeightPx / 2)
 
         val params = WindowManager.LayoutParams(
