@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.thepunisherbaby.apkisland"
-    compileSdk = 37
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.thepunisherbaby.apkisland"
         minSdk = 31 // Android 12 para RenderEffect y 120hz APIs
-        targetSdk = 37
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 

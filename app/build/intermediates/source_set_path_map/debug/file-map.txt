@@ -1,0 +1,48 @@
+com.thepunisherbaby.apkisland.app-foundation-layout-release-0 /Users/iMac/.gradle/caches/transforms-4/089deb47dbd1fff9aef38f3987c0ab40/transformed/foundation-layout-release/res
+com.thepunisherbaby.apkisland.app-material3-1.1.1-1 /Users/iMac/.gradle/caches/transforms-4/0c2469e71393041667d85980d92872c8/transformed/material3-1.1.1/res
+com.thepunisherbaby.apkisland.app-lifecycle-viewmodel-2.7.0-2 /Users/iMac/.gradle/caches/transforms-4/0fc035fe53e1079d43609ab73e230f48/transformed/lifecycle-viewmodel-2.7.0/res
+com.thepunisherbaby.apkisland.app-runtime-saveable-release-3 /Users/iMac/.gradle/caches/transforms-4/1b98bf07c953f9162001a5b11ba9ace1/transformed/runtime-saveable-release/res
+com.thepunisherbaby.apkisland.app-savedstate-ktx-1.2.1-4 /Users/iMac/.gradle/caches/transforms-4/242253d4db8cf6786e822275e8600449/transformed/savedstate-ktx-1.2.1/res
+com.thepunisherbaby.apkisland.app-foundation-release-5 /Users/iMac/.gradle/caches/transforms-4/24e460b9ed5f9cbfd738781cb2c72f76/transformed/foundation-release/res
+com.thepunisherbaby.apkisland.app-lifecycle-viewmodel-ktx-2.7.0-6 /Users/iMac/.gradle/caches/transforms-4/2773aa0f3a94389d332078e42b41e5ab/transformed/lifecycle-viewmodel-ktx-2.7.0/res
+com.thepunisherbaby.apkisland.app-savedstate-1.2.1-7 /Users/iMac/.gradle/caches/transforms-4/281684e729cdd4ceffde4664d91c5b17/transformed/savedstate-1.2.1/res
+com.thepunisherbaby.apkisland.app-ui-tooling-data-release-8 /Users/iMac/.gradle/caches/transforms-4/3093ec5d2cba12a302af9270182595f7/transformed/ui-tooling-data-release/res
+com.thepunisherbaby.apkisland.app-animation-release-9 /Users/iMac/.gradle/caches/transforms-4/3583483e08c21e95faa7b77192a0cd55/transformed/animation-release/res
+com.thepunisherbaby.apkisland.app-ui-geometry-release-10 /Users/iMac/.gradle/caches/transforms-4/4643657fb8c00322613896bb1a5a71a7/transformed/ui-geometry-release/res
+com.thepunisherbaby.apkisland.app-activity-compose-1.8.2-11 /Users/iMac/.gradle/caches/transforms-4/4df5a8041197c39205ddaaa900a06b1d/transformed/activity-compose-1.8.2/res
+com.thepunisherbaby.apkisland.app-emoji2-1.4.0-12 /Users/iMac/.gradle/caches/transforms-4/4e570ba4c82a1e74131f24545f32f79c/transformed/emoji2-1.4.0/res
+com.thepunisherbaby.apkisland.app-material-release-13 /Users/iMac/.gradle/caches/transforms-4/4e7de03d8a6a4f680bf6c9a8039610b3/transformed/material-release/res
+com.thepunisherbaby.apkisland.app-startup-runtime-1.1.1-14 /Users/iMac/.gradle/caches/transforms-4/6f35824a14f21e9450cd8868e38b5556/transformed/startup-runtime-1.1.1/res
+com.thepunisherbaby.apkisland.app-animation-core-release-15 /Users/iMac/.gradle/caches/transforms-4/6f69007b2f291e1b3778e6e77595be6d/transformed/animation-core-release/res
+com.thepunisherbaby.apkisland.app-ui-tooling-preview-release-16 /Users/iMac/.gradle/caches/transforms-4/76a91bfcad82ef3896caee2d97386e0a/transformed/ui-tooling-preview-release/res
+com.thepunisherbaby.apkisland.app-ui-util-release-17 /Users/iMac/.gradle/caches/transforms-4/78441448bcaff66a693bcc191a7f386f/transformed/ui-util-release/res
+com.thepunisherbaby.apkisland.app-annotation-experimental-1.3.0-18 /Users/iMac/.gradle/caches/transforms-4/7f1c19d75183e4182a55135f586463d3/transformed/annotation-experimental-1.3.0/res
+com.thepunisherbaby.apkisland.app-material-icons-core-release-19 /Users/iMac/.gradle/caches/transforms-4/867c04fe896d80b473629480197f12d2/transformed/material-icons-core-release/res
+com.thepunisherbaby.apkisland.app-runtime-release-20 /Users/iMac/.gradle/caches/transforms-4/8ba6c28496281cf5fcb95c88b8121d18/transformed/runtime-release/res
+com.thepunisherbaby.apkisland.app-core-ktx-1.12.0-21 /Users/iMac/.gradle/caches/transforms-4/996408d1ac81f3e24a91832c9eb6062d/transformed/core-ktx-1.12.0/res
+com.thepunisherbaby.apkisland.app-ui-text-release-22 /Users/iMac/.gradle/caches/transforms-4/99806e7dab6fb89e981529b1f2dedb70/transformed/ui-text-release/res
+com.thepunisherbaby.apkisland.app-material-ripple-release-23 /Users/iMac/.gradle/caches/transforms-4/9da195503436e22f3f94a806e256baf5/transformed/material-ripple-release/res
+com.thepunisherbaby.apkisland.app-profileinstaller-1.3.0-24 /Users/iMac/.gradle/caches/transforms-4/a968a7bb32619dc312d158c704c98dcb/transformed/profileinstaller-1.3.0/res
+com.thepunisherbaby.apkisland.app-lifecycle-runtime-ktx-2.7.0-25 /Users/iMac/.gradle/caches/transforms-4/b043738327876446fea9e2619d9c78d0/transformed/lifecycle-runtime-ktx-2.7.0/res
+com.thepunisherbaby.apkisland.app-ui-tooling-release-26 /Users/iMac/.gradle/caches/transforms-4/b24bf2cf1ff31f8e31710c8f039d97fb/transformed/ui-tooling-release/res
+com.thepunisherbaby.apkisland.app-ui-unit-release-27 /Users/iMac/.gradle/caches/transforms-4/b5ba61acd8c24aa36068a6d66b6e8b61/transformed/ui-unit-release/res
+com.thepunisherbaby.apkisland.app-lifecycle-livedata-core-2.7.0-28 /Users/iMac/.gradle/caches/transforms-4/bcb5640f42eda86794a59c40d0cabf8c/transformed/lifecycle-livedata-core-2.7.0/res
+com.thepunisherbaby.apkisland.app-activity-1.8.2-29 /Users/iMac/.gradle/caches/transforms-4/c0ef9e4b7ef6dd38a6362f644252d016/transformed/activity-1.8.2/res
+com.thepunisherbaby.apkisland.app-core-runtime-2.2.0-30 /Users/iMac/.gradle/caches/transforms-4/c2f2e9ffb278cca87b700c6574ebb53f/transformed/core-runtime-2.2.0/res
+com.thepunisherbaby.apkisland.app-datastore-preferences-1.0.0-31 /Users/iMac/.gradle/caches/transforms-4/c572470092691e1d510b15ebfde9e16f/transformed/datastore-preferences-1.0.0/res
+com.thepunisherbaby.apkisland.app-activity-ktx-1.8.2-32 /Users/iMac/.gradle/caches/transforms-4/ce44ffbec67ce74a5bd0fc3076593d00/transformed/activity-ktx-1.8.2/res
+com.thepunisherbaby.apkisland.app-lifecycle-runtime-2.7.0-33 /Users/iMac/.gradle/caches/transforms-4/d7d5842e9ac765cc09716f36d9cdbf53/transformed/lifecycle-runtime-2.7.0/res
+com.thepunisherbaby.apkisland.app-lifecycle-viewmodel-savedstate-2.7.0-34 /Users/iMac/.gradle/caches/transforms-4/d8c47edea294cb46ab90aa081e4901b4/transformed/lifecycle-viewmodel-savedstate-2.7.0/res
+com.thepunisherbaby.apkisland.app-customview-poolingcontainer-1.0.0-35 /Users/iMac/.gradle/caches/transforms-4/d8d3a6987603bba13c7782eddb3f5e53/transformed/customview-poolingcontainer-1.0.0/res
+com.thepunisherbaby.apkisland.app-ui-graphics-release-36 /Users/iMac/.gradle/caches/transforms-4/df66317e16d29aae57348b8a84948cbe/transformed/ui-graphics-release/res
+com.thepunisherbaby.apkisland.app-core-1.12.0-37 /Users/iMac/.gradle/caches/transforms-4/ea3df0294d03aef598c6eca03c452a36/transformed/core-1.12.0/res
+com.thepunisherbaby.apkisland.app-ui-release-38 /Users/iMac/.gradle/caches/transforms-4/eb927e621a6d0485f82459889e1f104e/transformed/ui-release/res
+com.thepunisherbaby.apkisland.app-ui-test-manifest-1.5.0-39 /Users/iMac/.gradle/caches/transforms-4/ed3784e442e8ff251b76428857b9120c/transformed/ui-test-manifest-1.5.0/res
+com.thepunisherbaby.apkisland.app-lifecycle-process-2.7.0-40 /Users/iMac/.gradle/caches/transforms-4/f6b2f4b0521bdec9b27963b257442ab1/transformed/lifecycle-process-2.7.0/res
+com.thepunisherbaby.apkisland.app-datastore-1.0.0-41 /Users/iMac/.gradle/caches/transforms-4/fcdda2cad7c76a60f7e3c94a38dc310d/transformed/datastore-1.0.0/res
+com.thepunisherbaby.apkisland.app-resValues-42 /Users/iMac/Dinamic island/app/build/generated/res/resValues/debug
+com.thepunisherbaby.apkisland.app-packageDebugResources-43 /Users/iMac/Dinamic island/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.thepunisherbaby.apkisland.app-packageDebugResources-44 /Users/iMac/Dinamic island/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.thepunisherbaby.apkisland.app-merged_res-45 /Users/iMac/Dinamic island/app/build/intermediates/merged_res/debug
+com.thepunisherbaby.apkisland.app-debug-46 /Users/iMac/Dinamic island/app/src/debug/res
+com.thepunisherbaby.apkisland.app-main-47 /Users/iMac/Dinamic island/app/src/main/res
