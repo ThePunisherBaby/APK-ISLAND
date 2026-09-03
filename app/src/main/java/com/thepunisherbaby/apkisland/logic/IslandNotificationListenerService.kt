@@ -116,6 +116,20 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         Log.d("IslandNLS", "Notificación de: ${sbn.packageName}")
+        
+        // Dump all deskclock/timer notifications for reverse engineering
+        if (sbn.packageName.contains("deskclock") || sbn.packageName.contains("clock")) {
+            Log.d("IslandNLS_Dump", "====== DUMPING CLOCK NOTIFICATION ======")
+            val extras = sbn.notification.extras
+            if (extras != null) {
+                for (key in extras.keySet()) {
+                    val value = extras.get(key)
+                    Log.d("IslandNLS_Dump", "Key: $key = $value")
+                }
+            }
+            Log.d("IslandNLS_Dump", "========================================")
+        }
+
         val category = sbn.notification.category
         if (category == android.app.Notification.CATEGORY_CALL) {
             val title = sbn.notification.extras.getString(android.app.Notification.EXTRA_TITLE) ?: "Llamada entrante"
@@ -123,7 +137,8 @@ class IslandNotificationListenerService : NotificationListenerService() {
                 name = title,
                 duration = "0:00"
             )
-            com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState = com.thepunisherbaby.apkisland.ui.IslandState.CALL_COMPACT
+            // Expandir inmediatamente para esquivar la cámara y emular iOS
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState = com.thepunisherbaby.apkisland.ui.IslandState.CALL_EXPANDED
         }
     }
 
