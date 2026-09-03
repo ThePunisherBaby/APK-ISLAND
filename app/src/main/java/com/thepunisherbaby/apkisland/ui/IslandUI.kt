@@ -52,7 +52,8 @@ data class IslandMediaData(
     val isPlaying: Boolean = false,
     val progress: Float = 0f,
     val elapsed: String = "0:00",
-    val remaining: String = "0:00"
+    val remaining: String = "0:00",
+    val packageName: String = ""
 )
 
 data class IslandCallData(
@@ -265,8 +266,24 @@ private fun MusicCompactContent(data: IslandMediaData) {
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun MusicExpandedContent(data: IslandMediaData) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                if (data.packageName.isNotEmpty()) {
+                    val intent = context.packageManager.getLaunchIntentForPackage(data.packageName)
+                    if (intent != null) {
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                        IslandStateHolder.currentState = IslandState.MUSIC_COMPACT
+                    }
+                }
+            }
+            .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

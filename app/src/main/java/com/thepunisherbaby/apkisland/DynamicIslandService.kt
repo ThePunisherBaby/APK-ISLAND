@@ -57,6 +57,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
                 val progress = intent.getFloatExtra(IslandNotificationListenerService.EXTRA_PROGRESS, 0f)
                 val elapsed = intent.getStringExtra(IslandNotificationListenerService.EXTRA_ELAPSED) ?: "0:00"
                 val remaining = intent.getStringExtra(IslandNotificationListenerService.EXTRA_REMAINING) ?: "0:00"
+                val packageName = intent.getStringExtra(IslandNotificationListenerService.EXTRA_PACKAGE_NAME) ?: ""
 
                 Log.d("IslandService", "Media recibido: $title - $artist playing=$isPlaying")
 
@@ -66,7 +67,8 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
                     isPlaying = isPlaying,
                     progress = progress,
                     elapsed = elapsed,
-                    remaining = remaining
+                    remaining = remaining,
+                    packageName = packageName
                 )
 
                 if (isPlaying && IslandStateHolder.currentState == IslandState.IDLE) {
@@ -139,7 +141,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
 
         val displayMetrics = resources.displayMetrics
         val pillHeightPx = (36 * displayMetrics.density).toInt()
-        val cameraCenterY = (12 * displayMetrics.density).toInt()
+        val cameraCenterY = (16 * displayMetrics.density).toInt()
         val offsetY = cameraCenterY - (pillHeightPx / 2)
 
         val params = WindowManager.LayoutParams(
@@ -149,7 +151,8 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL

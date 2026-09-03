@@ -20,6 +20,7 @@ class IslandNotificationListenerService : NotificationListenerService() {
         const val EXTRA_PROGRESS = "progress"
         const val EXTRA_ELAPSED = "elapsed"
         const val EXTRA_REMAINING = "remaining"
+        const val EXTRA_PACKAGE_NAME = "package_name"
     }
 
     private var mediaSessionManager: MediaSessionManager? = null
@@ -31,7 +32,7 @@ class IslandNotificationListenerService : NotificationListenerService() {
             attachToController(controllers[0])
         } else {
             detachController()
-            sendMediaBroadcast("", "", false, 0f, "0:00", "0:00")
+            sendMediaBroadcast("", "", false, 0f, "0:00", "0:00", "")
         }
     }
 
@@ -86,15 +87,17 @@ class IslandNotificationListenerService : NotificationListenerService() {
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         val position = playbackState?.position ?: 0L
         val progress = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+        val packageName = controller.packageName ?: ""
 
         sendMediaBroadcast(
             title, artist, isPlaying, progress,
             formatTime(position),
-            if (duration > 0) "-${formatTime(duration - position)}" else "0:00"
+            if (duration > 0) "-${formatTime(duration - position)}" else "0:00",
+            packageName
         )
     }
 
-    private fun sendMediaBroadcast(title: String, artist: String, isPlaying: Boolean, progress: Float, elapsed: String, remaining: String) {
+    private fun sendMediaBroadcast(title: String, artist: String, isPlaying: Boolean, progress: Float, elapsed: String, remaining: String, packageName: String) {
         val intent = Intent(ACTION_MEDIA_UPDATE).apply {
             putExtra(EXTRA_TITLE, title)
             putExtra(EXTRA_ARTIST, artist)
@@ -102,9 +105,10 @@ class IslandNotificationListenerService : NotificationListenerService() {
             putExtra(EXTRA_PROGRESS, progress)
             putExtra(EXTRA_ELAPSED, elapsed)
             putExtra(EXTRA_REMAINING, remaining)
+            putExtra(EXTRA_PACKAGE_NAME, packageName)
         }
         sendBroadcast(intent)
-        Log.d("IslandNLS", "Media broadcast: $title - $artist playing=$isPlaying")
+        Log.d("IslandNLS", "Media broadcast: $title - $artist playing=$isPlaying pkg=$packageName")
     }
 
     private fun formatTime(ms: Long): String {
