@@ -116,10 +116,27 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         Log.d("IslandNLS", "Notificación de: ${sbn.packageName}")
+        val category = sbn.notification.category
+        if (category == android.app.Notification.CATEGORY_CALL) {
+            val title = sbn.notification.extras.getString(android.app.Notification.EXTRA_TITLE) ?: "Llamada entrante"
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.callData = com.thepunisherbaby.apkisland.ui.IslandCallData(
+                name = title,
+                duration = "0:00"
+            )
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState = com.thepunisherbaby.apkisland.ui.IslandState.CALL_COMPACT
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         Log.d("IslandNLS", "Notificación removida: ${sbn.packageName}")
+        val category = sbn.notification.category
+        if (category == android.app.Notification.CATEGORY_CALL) {
+            com.thepunisherbaby.apkisland.ui.IslandStateHolder.callData = com.thepunisherbaby.apkisland.ui.IslandCallData()
+            if (com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState == com.thepunisherbaby.apkisland.ui.IslandState.CALL_COMPACT ||
+                com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState == com.thepunisherbaby.apkisland.ui.IslandState.CALL_EXPANDED) {
+                com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState = com.thepunisherbaby.apkisland.ui.IslandState.IDLE
+            }
+        }
     }
 
     override fun onListenerDisconnected() {

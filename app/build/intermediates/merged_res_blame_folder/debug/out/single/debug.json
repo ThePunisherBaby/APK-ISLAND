@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.thepunisherbaby.apkisland.app-merged_res-46:/font_poppins_bold.ttf.flat",
+        "source": "com.thepunisherbaby.apkisland.app-main-48:/font/poppins_bold.ttf"
+    },
+    {
+        "merged": "com.thepunisherbaby.apkisland.app-merged_res-46:/font_poppins_regular.ttf.flat",
+        "source": "com.thepunisherbaby.apkisland.app-main-48:/font/poppins_regular.ttf"
+    }
+]

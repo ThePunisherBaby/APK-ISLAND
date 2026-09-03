@@ -18,35 +18,47 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thepunisherbaby.apkisland.R
 import kotlin.math.absoluteValue
 import kotlin.random.Random
+
+// ─── Fuentes Custom ──────────────────────────────────────────────────
+val PoppinsFontFamily = FontFamily(
+    Font(R.font.poppins_regular, FontWeight.Normal),
+    Font(R.font.poppins_bold, FontWeight.Bold)
+)
 
 // ─── Color negro OLED puro ───────────────────────────────────────────
 private val OledBlack = Color(0xFF000000)
 
 // ─── Estados de la isla ───────────────────────────────────────────────
 enum class IslandState {
-    IDLE,            // Píldora negra OLED base (sin contenido)
-    MUSIC_COMPACT,   // Píldora base: carátula + ecualizador
-    MUSIC_EXPANDED,  // Panel grande: reproductor completo
-    TIMER_COMPACT,   // Píldora: ícono + cuenta regresiva
-    TIMER_EXPANDED,  // Panel grande: temporizador circular
-    CALL_COMPACT,    // Píldora: ícono teléfono + duración
-    CALL_EXPANDED,   // Panel grande: llamada con botones
-    LOCK_ANIM        // Animación rápida candado
+    IDLE,
+    MUSIC_COMPACT,
+    MUSIC_EXPANDED,
+    TIMER_COMPACT,
+    TIMER_EXPANDED,
+    CALL_COMPACT,
+    CALL_EXPANDED,
+    LOCK_ANIM
 }
 
 // ─── Datos reales del sistema ────────────────────────────────────────
@@ -85,10 +97,8 @@ fun IslandUI() {
     var state by remember { mutableStateOf(IslandState.IDLE) }
     var swipeAccum by remember { mutableFloatStateOf(0f) }
 
-    // Sincronizar con el estado global (que viene del NotificationListener)
     LaunchedEffect(IslandStateHolder.currentState) {
         val systemState = IslandStateHolder.currentState
-        // Solo cambiar a compacto si viene del sistema, no sobreescribir expanded
         if (systemState != IslandState.IDLE) {
             if (state == IslandState.IDLE) {
                 state = systemState
@@ -98,7 +108,6 @@ fun IslandUI() {
         }
     }
 
-    // Lista de estados compactos activos para swipe
     val activeCompactStates = buildList {
         if (IslandStateHolder.mediaData.isPlaying) add(IslandState.MUSIC_COMPACT)
         if (IslandStateHolder.timerData.remaining != "0:00") add(IslandState.TIMER_COMPACT)
@@ -106,7 +115,6 @@ fun IslandUI() {
     }
     var compactIndex by remember { mutableIntStateOf(0) }
 
-    // ── Dimensiones animadas con spring (morphing) ──
     val isExpanded = state in listOf(
         IslandState.MUSIC_EXPANDED,
         IslandState.TIMER_EXPANDED,
@@ -118,10 +126,10 @@ fun IslandUI() {
         IslandState.CALL_COMPACT
     )
 
-    // TAMAÑO INICIAL FIJO PARA IDLE Y COMPACTO
+    // TAMAÑO INICIAL FIJO PARA IDLE Y COMPACTO (Aún menos ancha: 92dp)
     val targetW: Dp = when {
         isExpanded -> 340.dp
-        else       -> 100.dp   // píldora base única y estática (más pequeña)
+        else       -> 92.dp   
     }
     val targetH: Dp = when {
         isExpanded -> 180.dp
@@ -133,42 +141,47 @@ fun IslandUI() {
     }
 
     val morphSpec: AnimationSpec<Dp> = spring(
-        dampingRatio = 0.65f, // Más fluida y rebotona
+        dampingRatio = 0.65f,
         stiffness = Spring.StiffnessLow
     )
     val width  by animateDpAsState(targetW, morphSpec, label = "w")
     val height by animateDpAsState(targetH, morphSpec, label = "h")
     val corner by animateDpAsState(targetCorner, morphSpec, label = "c")
 
-    // Escala "bounce" al expandir
+    // Shift hacia abajo al expandir para no tapar iconos de la barra de estado
+    val expandOffsetY by animateDpAsState(
+        targetValue = if (isExpanded) 18.dp else 0.dp,
+        animationSpec = morphSpec,
+        label = "offsetY"
+    )
+
     val scaleAnim = remember { Animatable(1f) }
     LaunchedEffect(state) {
         scaleAnim.snapTo(0.96f)
         scaleAnim.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow))
     }
 
-    // Color del glow según estado
+    // Ya no hay outline rosa para música
     val glowColor by animateColorAsState(
         targetValue = when (state) {
-            IslandState.MUSIC_COMPACT, IslandState.MUSIC_EXPANDED -> Color(0x40FF375F)
-            IslandState.TIMER_COMPACT, IslandState.TIMER_EXPANDED -> Color(0x40FF9F0A)
+            IslandState.MUSIC_COMPACT, IslandState.MUSIC_EXPANDED -> Color.Transparent
+            IslandState.TIMER_COMPACT, IslandState.TIMER_EXPANDED -> Color(0x40FFCC00)
             IslandState.CALL_COMPACT, IslandState.CALL_EXPANDED   -> Color(0x4030D158)
             IslandState.LOCK_ANIM                                  -> Color(0x40FFFFFF)
-            else                                                   -> Color(0x00000000)
+            else                                                   -> Color.Transparent
         },
         animationSpec = tween(500),
         label = "glow"
     )
 
-    // Contenedor exterior: glow difuminado mínimo
     Box(
         modifier = Modifier
+            .offset(y = expandOffsetY)
             .width(width + 24.dp)
             .height(height + 24.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Outline difuminado y mínimo
-        if (state != IslandState.IDLE) {
+        if (glowColor != Color.Transparent) {
             Box(
                 modifier = Modifier
                     .width(width + 2.dp)
@@ -179,7 +192,6 @@ fun IslandUI() {
             )
         }
 
-        // ── La píldora real ──
         Box(
             modifier = Modifier
                 .width(width)
@@ -189,7 +201,7 @@ fun IslandUI() {
                     scaleY = scaleAnim.value
                 }
                 .clip(RoundedCornerShape(corner))
-                .background(OledBlack) // ← Negro OLED puro
+                .background(OledBlack)
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
@@ -212,7 +224,6 @@ fun IslandUI() {
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) {
-                    // Solo expandir/colapsar si hay contenido activo
                     state = when (state) {
                         IslandState.MUSIC_COMPACT  -> IslandState.MUSIC_EXPANDED
                         IslandState.MUSIC_EXPANDED -> IslandState.MUSIC_COMPACT
@@ -221,13 +232,13 @@ fun IslandUI() {
                         IslandState.CALL_COMPACT   -> IslandState.CALL_EXPANDED
                         IslandState.CALL_EXPANDED  -> IslandState.CALL_COMPACT
                         IslandState.LOCK_ANIM      -> IslandState.IDLE
-                        IslandState.IDLE           -> IslandState.IDLE // No hacer nada en IDLE
+                        IslandState.IDLE           -> IslandState.IDLE
                     }
                 },
             contentAlignment = Alignment.Center
         ) {
             when (state) {
-                IslandState.IDLE           -> { /* Píldora negra OLED vacía */ }
+                IslandState.IDLE           -> { }
                 IslandState.LOCK_ANIM      -> LockAnimation()
                 IslandState.MUSIC_COMPACT  -> MusicCompactContent(IslandStateHolder.mediaData, IslandStateHolder.currentArtwork)
                 IslandState.MUSIC_EXPANDED -> MusicExpandedContent(IslandStateHolder.mediaData, IslandStateHolder.currentArtwork)
@@ -237,16 +248,16 @@ fun IslandUI() {
                 IslandState.CALL_EXPANDED  -> CallExpandedContent(IslandStateHolder.callData)
             }
         }
-    } // cierre del Box exterior (glow)
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  MÚSICA – COMPACTO (datos reales + artwork + tamaño estricto)
+//  MÚSICA – COMPACTO 
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun MusicCompactContent(data: IslandMediaData, artwork: android.graphics.Bitmap?) {
     Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -255,24 +266,25 @@ private fun MusicCompactContent(data: IslandMediaData, artwork: android.graphics
                 bitmap = artwork.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(24.dp).clip(CircleShape)
+                modifier = Modifier.size(28.dp).clip(CircleShape)
             )
         } else {
-            Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color(0xFF2C2C2E)))
+            Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF2C2C2E)))
         }
         
         Spacer(Modifier.weight(1f))
         
         if (data.isPlaying) {
             EqualizerBars(barCount = 3, barWidth = 3.dp, maxHeight = 16.dp, color = Color(0xFF1DB954))
+            Spacer(Modifier.width(4.dp))
         } else {
-            Spacer(Modifier.size(24.dp)) // mantener espacio
+            Spacer(Modifier.size(24.dp)) 
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  MÚSICA – EXPANDIDO (datos reales)
+//  MÚSICA – EXPANDIDO
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphics.Bitmap?) {
@@ -311,12 +323,12 @@ private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphic
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     data.title.ifEmpty { "Sin reproducción" },
-                    color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    color = Color.White, fontSize = 15.sp, fontFamily = PoppinsFontFamily, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     data.artist.ifEmpty { "—" },
-                    color = Color(0xFF8E8E93), fontSize = 13.sp,
+                    color = Color(0xFF8E8E93), fontSize = 13.sp, fontFamily = PoppinsFontFamily,
                     maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
             }
@@ -327,8 +339,8 @@ private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphic
         Spacer(Modifier.height(8.dp))
         ProgressBar(progress = data.progress)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(data.elapsed, color = Color(0xFF8E8E93), fontSize = 11.sp)
-            Text(data.remaining, color = Color(0xFF8E8E93), fontSize = 11.sp)
+            Text(data.elapsed, color = Color(0xFF8E8E93), fontSize = 11.sp, fontFamily = PoppinsFontFamily)
+            Text(data.remaining, color = Color(0xFF8E8E93), fontSize = 11.sp, fontFamily = PoppinsFontFamily)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             Text("⏮", color = Color.White, fontSize = 22.sp)
@@ -339,27 +351,47 @@ private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphic
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  TIMER – COMPACTO (datos reales)
+//  TIMER – COMPACTO (Diseño Apple: Outline como barra de progreso)
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun TimerCompactContent(data: IslandTimerData) {
-    Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(22.dp)) {
-                drawArc(color = Color(0xFF3A3A3C), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
-                drawArc(color = Color(0xFFFF9F0A), startAngle = -90f, sweepAngle = data.progress * 360f, useCenter = false, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Outline como barra de progreso que envuelve la píldora
+        Canvas(modifier = Modifier.fillMaxSize().padding(1.dp)) {
+            val path = Path().apply {
+                addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(size.height / 2)))
             }
+            val measure = PathMeasure()
+            measure.setPath(path, false)
+            
+            val progressPath = Path()
+            measure.getSegment(0f, measure.length * data.progress, progressPath, true)
+            
+            // Fondo tenue
+            drawPath(path, color = Color(0xFF3A3A3C), style = Stroke(width = 2.dp.toPx()))
+            // Progreso amarillo Apple
+            drawPath(progressPath, color = Color(0xFFFFCC00), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
         }
-        Text(data.remaining, color = Color(0xFFFF9F0A), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("⏱", fontSize = 14.sp)
+            Text(
+                data.remaining, 
+                color = Color(0xFFFFCC00), 
+                fontSize = 14.sp, 
+                fontFamily = PoppinsFontFamily, 
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  TIMER – EXPANDIDO (datos reales)
+//  TIMER – EXPANDIDO 
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun TimerExpandedContent(data: IslandTimerData) {
@@ -371,27 +403,27 @@ private fun TimerExpandedContent(data: IslandTimerData) {
         Box(contentAlignment = Alignment.Center) {
             Canvas(modifier = Modifier.size(90.dp)) {
                 drawArc(color = Color(0xFF3A3A3C), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round))
-                drawArc(color = Color(0xFFFF9F0A), startAngle = -90f, sweepAngle = data.progress * 360f, useCenter = false, style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round))
+                drawArc(color = Color(0xFFFFCC00), startAngle = -90f, sweepAngle = data.progress * 360f, useCenter = false, style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round))
             }
-            Text(data.remaining, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(data.remaining, color = Color.White, fontSize = 22.sp, fontFamily = PoppinsFontFamily, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-            Text("Cancel", color = Color(0xFF8E8E93), fontSize = 14.sp)
-            Text("Pause", color = Color(0xFFFF9F0A), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("Cancel", color = Color(0xFF8E8E93), fontSize = 14.sp, fontFamily = PoppinsFontFamily)
+            Text("Pause", color = Color(0xFFFFCC00), fontSize = 14.sp, fontFamily = PoppinsFontFamily, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  LLAMADA – COMPACTO (datos reales)
+//  LLAMADA – COMPACTO 
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun CallCompactContent(data: IslandCallData) {
     val infiniteTransition = rememberInfiniteTransition(label = "call")
     val pulse by infiniteTransition.animateFloat(0.7f, 1f, infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse")
     Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -399,13 +431,12 @@ private fun CallCompactContent(data: IslandCallData) {
             modifier = Modifier.size(24.dp).graphicsLayer { alpha = pulse }.clip(CircleShape).background(Color(0xFF30D158)),
             contentAlignment = Alignment.Center
         ) { Text("📞", fontSize = 12.sp) }
-        Text(data.duration, color = Color(0xFF30D158), fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        WaveformBars(barCount = 8, color = Color(0xFF30D158))
+        Text(data.duration, color = Color(0xFF30D158), fontSize = 14.sp, fontFamily = PoppinsFontFamily, fontWeight = FontWeight.Bold)
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  LLAMADA – EXPANDIDO (datos reales)
+//  LLAMADA – EXPANDIDO 
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun CallExpandedContent(data: IslandCallData) {
@@ -414,8 +445,8 @@ private fun CallExpandedContent(data: IslandCallData) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("mobile", color = Color(0xFF8E8E93), fontSize = 12.sp)
-        Text(data.name.ifEmpty { "Llamada" }, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text("Llamada Entrante", color = Color(0xFF8E8E93), fontSize = 12.sp, fontFamily = PoppinsFontFamily)
+        Text(data.name.ifEmpty { "Desconocido" }, color = Color.White, fontSize = 18.sp, fontFamily = PoppinsFontFamily, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         WaveformBars(barCount = 20, color = Color(0xFF30D158), barHeight = 28.dp)
         Spacer(Modifier.height(16.dp))
@@ -444,7 +475,8 @@ private fun LockAnimation() {
 @Composable
 private fun EqualizerBars(barCount: Int, barWidth: Dp, maxHeight: Dp, color: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "eq")
-    val phases = remember { List(barCount) { Random.nextInt(600, 1200) } }
+    // Animación de ecualizador muchísimo más lenta como pediste (hasta 3 segundos)
+    val phases = remember { List(barCount) { Random.nextInt(1500, 3000) } }
     Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         phases.forEachIndexed { i, duration ->
             val anim by infiniteTransition.animateFloat(0.2f, 1f, infiniteRepeatable(tween(duration, easing = LinearEasing), RepeatMode.Reverse), label = "bar$i")
@@ -454,7 +486,7 @@ private fun EqualizerBars(barCount: Int, barWidth: Dp, maxHeight: Dp, color: Col
                     .height(maxHeight * anim)
                     .clip(RoundedCornerShape(50))
                     .background(color)
-                    .blur(1.5.dp) // Morphing motion blur simulado
+                    .blur(1.5.dp) // Blur simulado de movimiento
             )
         }
     }
