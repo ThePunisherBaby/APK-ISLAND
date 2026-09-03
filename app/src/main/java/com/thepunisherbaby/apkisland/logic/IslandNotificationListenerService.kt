@@ -88,6 +88,12 @@ class IslandNotificationListenerService : NotificationListenerService() {
         val position = playbackState?.position ?: 0L
         val progress = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
         val packageName = controller.packageName ?: ""
+        
+        val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+            
+        com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentArtwork = artwork
 
         sendMediaBroadcast(
             title, artist, isPlaying, progress,

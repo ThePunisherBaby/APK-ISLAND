@@ -3,6 +3,7 @@ package com.thepunisherbaby.apkisland.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -14,14 +15,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -36,7 +40,7 @@ private val OledBlack = Color(0xFF000000)
 // ─── Estados de la isla ───────────────────────────────────────────────
 enum class IslandState {
     IDLE,            // Píldora negra OLED base (sin contenido)
-    MUSIC_COMPACT,   // Píldora ensanchada: carátula + ecualizador
+    MUSIC_COMPACT,   // Píldora base: carátula + ecualizador
     MUSIC_EXPANDED,  // Panel grande: reproductor completo
     TIMER_COMPACT,   // Píldora: ícono + cuenta regresiva
     TIMER_EXPANDED,  // Panel grande: temporizador circular
@@ -72,6 +76,7 @@ object IslandStateHolder {
     var mediaData by mutableStateOf(IslandMediaData())
     var callData by mutableStateOf(IslandCallData())
     var timerData by mutableStateOf(IslandTimerData())
+    var currentArtwork by mutableStateOf<android.graphics.Bitmap?>(null)
 }
 
 // ─── Composable raíz ─────────────────────────────────────────────────
@@ -113,14 +118,13 @@ fun IslandUI() {
         IslandState.CALL_COMPACT
     )
 
+    // TAMAÑO INICIAL FIJO PARA IDLE Y COMPACTO
     val targetW: Dp = when {
         isExpanded -> 340.dp
-        isCompact  -> 180.dp
-        else       -> 100.dp   // píldora base más delgada
+        else       -> 120.dp   // píldora base única y estática para compact e idle
     }
     val targetH: Dp = when {
         isExpanded -> 180.dp
-        isCompact  -> 38.dp
         else       -> 36.dp
     }
     val targetCorner: Dp = when {
@@ -129,8 +133,8 @@ fun IslandUI() {
     }
 
     val morphSpec: AnimationSpec<Dp> = spring(
-        dampingRatio = 0.72f,
-        stiffness = Spring.StiffnessMediumLow
+        dampingRatio = 0.65f, // Más fluida y rebotona
+        stiffness = Spring.StiffnessLow
     )
     val width  by animateDpAsState(targetW, morphSpec, label = "w")
     val height by animateDpAsState(targetH, morphSpec, label = "h")
@@ -139,8 +143,8 @@ fun IslandUI() {
     // Escala "bounce" al expandir
     val scaleAnim = remember { Animatable(1f) }
     LaunchedEffect(state) {
-        scaleAnim.snapTo(0.97f)
-        scaleAnim.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow))
+        scaleAnim.snapTo(0.96f)
+        scaleAnim.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow))
     }
 
     // Color del glow según estado
@@ -156,24 +160,23 @@ fun IslandUI() {
         label = "glow"
     )
 
-    // Contenedor exterior: glow difuminado
+    // Contenedor exterior: glow difuminado mínimo
     Box(
         modifier = Modifier
-            .width(width + 16.dp)
-            .height(height + 16.dp),
+            .width(width + 24.dp)
+            .height(height + 24.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Capas de glow
+        // Outline difuminado y mínimo
         if (state != IslandState.IDLE) {
-            Canvas(modifier = Modifier.width(width + 12.dp).height(height + 12.dp)) {
-                drawRoundRect(color = glowColor.copy(alpha = glowColor.alpha * 0.3f), cornerRadius = CornerRadius((corner + 8.dp).toPx()), size = size)
-            }
-            Canvas(modifier = Modifier.width(width + 6.dp).height(height + 6.dp)) {
-                drawRoundRect(color = glowColor.copy(alpha = glowColor.alpha * 0.5f), cornerRadius = CornerRadius((corner + 4.dp).toPx()), size = size)
-            }
-            Canvas(modifier = Modifier.width(width + 2.dp).height(height + 2.dp)) {
-                drawRoundRect(color = glowColor.copy(alpha = glowColor.alpha * 0.8f), cornerRadius = CornerRadius((corner + 1.dp).toPx()), size = size)
-            }
+            Box(
+                modifier = Modifier
+                    .width(width + 2.dp)
+                    .height(height + 2.dp)
+                    .clip(RoundedCornerShape(corner))
+                    .background(glowColor)
+                    .blur(12.dp)
+            )
         }
 
         // ── La píldora real ──
@@ -226,8 +229,8 @@ fun IslandUI() {
             when (state) {
                 IslandState.IDLE           -> { /* Píldora negra OLED vacía */ }
                 IslandState.LOCK_ANIM      -> LockAnimation()
-                IslandState.MUSIC_COMPACT  -> MusicCompactContent(IslandStateHolder.mediaData)
-                IslandState.MUSIC_EXPANDED -> MusicExpandedContent(IslandStateHolder.mediaData)
+                IslandState.MUSIC_COMPACT  -> MusicCompactContent(IslandStateHolder.mediaData, IslandStateHolder.currentArtwork)
+                IslandState.MUSIC_EXPANDED -> MusicExpandedContent(IslandStateHolder.mediaData, IslandStateHolder.currentArtwork)
                 IslandState.TIMER_COMPACT  -> TimerCompactContent(IslandStateHolder.timerData)
                 IslandState.TIMER_EXPANDED -> TimerExpandedContent(IslandStateHolder.timerData)
                 IslandState.CALL_COMPACT   -> CallCompactContent(IslandStateHolder.callData)
@@ -238,25 +241,32 @@ fun IslandUI() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  MÚSICA – COMPACTO (datos reales del MediaController)
+//  MÚSICA – COMPACTO (datos reales + artwork + tamaño estricto)
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
-private fun MusicCompactContent(data: IslandMediaData) {
+private fun MusicCompactContent(data: IslandMediaData, artwork: android.graphics.Bitmap?) {
     Row(
-        modifier = Modifier.fillMaxSize().padding(start = 4.dp, end = 8.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Carátula circular
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF2C2C2E))
-        )
-        Spacer(Modifier.width(6.dp))
+        if (artwork != null) {
+            Image(
+                bitmap = artwork.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(24.dp).clip(CircleShape)
+            )
+        } else {
+            Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color(0xFF2C2C2E)))
+        }
+        
+        Spacer(Modifier.weight(1f))
+        
         if (data.isPlaying) {
-            EqualizerBars(barCount = 4, barWidth = 3.dp, maxHeight = 16.dp, color = Color(0xFFFF375F))
+            EqualizerBars(barCount = 3, barWidth = 3.dp, maxHeight = 16.dp, color = Color(0xFFFF375F))
+        } else {
+            Spacer(Modifier.size(24.dp)) // mantener espacio
         }
     }
 }
@@ -265,7 +275,7 @@ private fun MusicCompactContent(data: IslandMediaData) {
 //  MÚSICA – EXPANDIDO (datos reales)
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
-private fun MusicExpandedContent(data: IslandMediaData) {
+private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphics.Bitmap?) {
     val context = androidx.compose.ui.platform.LocalContext.current
     Column(
         modifier = Modifier
@@ -287,12 +297,16 @@ private fun MusicExpandedContent(data: IslandMediaData) {
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF2C2C2E))
-            )
+            if (artwork != null) {
+                Image(
+                    bitmap = artwork.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp))
+                )
+            } else {
+                Box(modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF2C2C2E)))
+            }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
