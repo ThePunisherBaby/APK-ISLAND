@@ -3,9 +3,11 @@ package com.thepunisherbaby.apkisland.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thepunisherbaby.apkisland.R
+import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 
@@ -79,7 +82,8 @@ data class IslandCallData(
 
 data class IslandTimerData(
     val remaining: String = "0:00",
-    val progress: Float = 0f
+    val progress: Float = 0f,
+    val baseTime: Long = 0L
 )
 
 // ─── Estado global compartido con el servicio ────────────────────────
@@ -92,8 +96,10 @@ object IslandStateHolder {
 }
 
 // ─── Composable raíz ─────────────────────────────────────────────────
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun IslandUI() {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var state by remember { mutableStateOf(IslandState.IDLE) }
     var swipeAccum by remember { mutableFloatStateOf(0f) }
 
@@ -220,21 +226,39 @@ fun IslandUI() {
                         swipeAccum += amount
                     }
                 }
-                .clickable(
+                .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    state = when (state) {
-                        IslandState.MUSIC_COMPACT  -> IslandState.MUSIC_EXPANDED
-                        IslandState.MUSIC_EXPANDED -> IslandState.MUSIC_COMPACT
-                        IslandState.TIMER_COMPACT  -> IslandState.TIMER_EXPANDED
-                        IslandState.TIMER_EXPANDED -> IslandState.TIMER_COMPACT
-                        IslandState.CALL_COMPACT   -> IslandState.CALL_EXPANDED
-                        IslandState.CALL_EXPANDED  -> IslandState.CALL_COMPACT
-                        IslandState.LOCK_ANIM      -> IslandState.IDLE
-                        IslandState.IDLE           -> IslandState.IDLE
+                    indication = null,
+                    onClick = {
+                        // Un toque simple abre la app de origen o colapsa si está expandida
+                        when (state) {
+                            IslandState.MUSIC_COMPACT -> {
+                                val pkg = IslandStateHolder.mediaData.packageName
+                                if (pkg.isNotEmpty()) {
+                                    val intent = context.packageManager.getLaunchIntentForPackage(pkg)
+                                    if (intent != null) {
+                                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(intent)
+                                    }
+                                }
+                            }
+                            IslandState.MUSIC_EXPANDED -> state = IslandState.MUSIC_COMPACT
+                            IslandState.TIMER_EXPANDED -> state = IslandState.TIMER_COMPACT
+                            IslandState.CALL_EXPANDED  -> state = IslandState.CALL_COMPACT
+                            else -> {}
+                        }
+                    },
+                    onLongClick = {
+                        // Presión larga expande la isla
+                        state = when (state) {
+                            IslandState.MUSIC_COMPACT  -> IslandState.MUSIC_EXPANDED
+                            IslandState.TIMER_COMPACT  -> IslandState.TIMER_EXPANDED
+                            IslandState.CALL_COMPACT   -> IslandState.CALL_EXPANDED
+                            IslandState.LOCK_ANIM      -> IslandState.IDLE
+                            else -> state
+                        }
                     }
-                },
+                ),
             contentAlignment = Alignment.Center
         ) {
             when (state) {
@@ -355,6 +379,21 @@ private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphic
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun TimerCompactContent(data: IslandTimerData) {
+    var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(data.baseTime) {
+        if (data.baseTime > 0) {
+            while (true) {
+                delay(1000)
+                tick = System.currentTimeMillis()
+            }
+        }
+    }
+
+    val remainingMs = if (data.baseTime > 0) (data.baseTime - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L) else 0L
+    val min = remainingMs / 60000
+    val sec = (remainingMs % 60000) / 1000
+    val displayTime = if (data.baseTime > 0) "$min:${sec.toString().padStart(2, '0')}" else data.remaining
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Outline como barra de progreso que envuelve la píldora
         Canvas(modifier = Modifier.fillMaxSize().padding(1.dp)) {
@@ -380,7 +419,7 @@ private fun TimerCompactContent(data: IslandTimerData) {
         ) {
             Text("⏱", fontSize = 14.sp)
             Text(
-                data.remaining, 
+                displayTime, 
                 color = Color(0xFFFFCC00), 
                 fontSize = 14.sp, 
                 fontFamily = PoppinsFontFamily, 
@@ -395,6 +434,21 @@ private fun TimerCompactContent(data: IslandTimerData) {
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
 private fun TimerExpandedContent(data: IslandTimerData) {
+    var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(data.baseTime) {
+        if (data.baseTime > 0) {
+            while (true) {
+                delay(1000)
+                tick = System.currentTimeMillis()
+            }
+        }
+    }
+
+    val remainingMs = if (data.baseTime > 0) (data.baseTime - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L) else 0L
+    val min = remainingMs / 60000
+    val sec = (remainingMs % 60000) / 1000
+    val displayTime = if (data.baseTime > 0) "$min:${sec.toString().padStart(2, '0')}" else data.remaining
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -405,7 +459,7 @@ private fun TimerExpandedContent(data: IslandTimerData) {
                 drawArc(color = Color(0xFF3A3A3C), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round))
                 drawArc(color = Color(0xFFFFCC00), startAngle = -90f, sweepAngle = data.progress * 360f, useCenter = false, style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round))
             }
-            Text(data.remaining, color = Color.White, fontSize = 22.sp, fontFamily = PoppinsFontFamily, fontWeight = FontWeight.Bold)
+            Text(displayTime, color = Color.White, fontSize = 22.sp, fontFamily = PoppinsFontFamily, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
