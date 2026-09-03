@@ -4,12 +4,15 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
@@ -23,13 +26,17 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService
+import com.thepunisherbaby.apkisland.ui.IslandMediaData
+import com.thepunisherbaby.apkisland.ui.IslandState
+import com.thepunisherbaby.apkisland.ui.IslandStateHolder
 import com.thepunisherbaby.apkisland.ui.IslandUI
 
 class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreOwner {
 
     private lateinit var windowManager: WindowManager
     private var composeView: ComposeView? = null
-    
+
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val store = ViewModelStore()
@@ -40,21 +47,58 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
     override val viewModelStore: ViewModelStore
         get() = store
 
+    // Receptor de broadcasts de media del NotificationListenerService
+    private val mediaReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == IslandNotificationListenerService.ACTION_MEDIA_UPDATE) {
+                val title = intent.getStringExtra(IslandNotificationListenerService.EXTRA_TITLE) ?: ""
+                val artist = intent.getStringExtra(IslandNotificationListenerService.EXTRA_ARTIST) ?: ""
+                val isPlaying = intent.getBooleanExtra(IslandNotificationListenerService.EXTRA_IS_PLAYING, false)
+                val progress = intent.getFloatExtra(IslandNotificationListenerService.EXTRA_PROGRESS, 0f)
+                val elapsed = intent.getStringExtra(IslandNotificationListenerService.EXTRA_ELAPSED) ?: "0:00"
+                val remaining = intent.getStringExtra(IslandNotificationListenerService.EXTRA_REMAINING) ?: "0:00"
+
+                Log.d("IslandService", "Media recibido: $title - $artist playing=$isPlaying")
+
+                IslandStateHolder.mediaData = IslandMediaData(
+                    title = title,
+                    artist = artist,
+                    isPlaying = isPlaying,
+                    progress = progress,
+                    elapsed = elapsed,
+                    remaining = remaining
+                )
+
+                if (isPlaying && IslandStateHolder.currentState == IslandState.IDLE) {
+                    IslandStateHolder.currentState = IslandState.MUSIC_COMPACT
+                } else if (!isPlaying && IslandStateHolder.currentState == IslandState.MUSIC_COMPACT) {
+                    IslandStateHolder.currentState = IslandState.IDLE
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
-        
+
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         startForegroundNotification()
-        
-        // Solo agregar la vista si tenemos el permiso de superposición
+
+        // Registrar receptor de broadcasts
+        val filter = IntentFilter(IslandNotificationListenerService.ACTION_MEDIA_UPDATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mediaReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(mediaReceiver, filter)
+        }
+
         if (Settings.canDrawOverlays(this)) {
             addIslandView()
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         } else {
-            // Sin permiso: el servicio sigue vivo pero no dibuja nada
             stopSelf()
         }
     }
@@ -75,7 +119,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         val notification = Notification.Builder(this, channelId)
             .setContentTitle("Isla Dinámica Activa")
             .setContentText("Tapando cámara y escuchando notificaciones")
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // ← Ícono requerido por Android 14+
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
 
@@ -93,12 +137,9 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         }
         composeView = cv
 
-        // ── Pixel 8: Cámara frontal centrada ──
-        // El punch-hole del Pixel 8 está centrado horizontalmente.
-        // Su centro vertical está a ~56dp del borde superior absoluto.
         val displayMetrics = resources.displayMetrics
         val pillHeightPx = (36 * displayMetrics.density).toInt()
-        val cameraCenterY = (24 * displayMetrics.density).toInt() // centro del punch-hole Pixel 8
+        val cameraCenterY = (12 * displayMetrics.density).toInt()
         val offsetY = cameraCenterY - (pillHeightPx / 2)
 
         val params = WindowManager.LayoutParams(
@@ -120,6 +161,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
 
     override fun onDestroy() {
         super.onDestroy()
+        try { unregisterReceiver(mediaReceiver) } catch (_: Exception) {}
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         composeView?.let {
             windowManager.removeView(it)
@@ -128,7 +170,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-    
+
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
 }

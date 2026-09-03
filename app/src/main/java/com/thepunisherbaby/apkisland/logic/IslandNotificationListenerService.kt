@@ -1,19 +1,26 @@
 package com.thepunisherbaby.apkisland.logic
 
 import android.content.ComponentName
+import android.content.Intent
 import android.media.MediaMetadata
 import android.media.session.MediaController
-import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import com.thepunisherbaby.apkisland.ui.IslandMediaData
-import com.thepunisherbaby.apkisland.ui.IslandState
-import com.thepunisherbaby.apkisland.ui.IslandStateHolder
 
 class IslandNotificationListenerService : NotificationListenerService() {
+
+    companion object {
+        const val ACTION_MEDIA_UPDATE = "com.thepunisherbaby.apkisland.MEDIA_UPDATE"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_ARTIST = "artist"
+        const val EXTRA_IS_PLAYING = "is_playing"
+        const val EXTRA_PROGRESS = "progress"
+        const val EXTRA_ELAPSED = "elapsed"
+        const val EXTRA_REMAINING = "remaining"
+    }
 
     private var mediaSessionManager: MediaSessionManager? = null
     private var activeController: MediaController? = null
@@ -24,19 +31,19 @@ class IslandNotificationListenerService : NotificationListenerService() {
             attachToController(controllers[0])
         } else {
             detachController()
+            sendMediaBroadcast("", "", false, 0f, "0:00", "0:00")
         }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.d("IslandNLS", "NotificationListener conectado")
-        
+        Log.d("IslandNLS", "NotificationListener conectado!")
+
         try {
             mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as? MediaSessionManager
             val component = ComponentName(this, IslandNotificationListenerService::class.java)
             mediaSessionManager?.addOnActiveSessionsChangedListener(sessionListener, component)
-            
-            // Verificar sesiones activas actuales
+
             val controllers = mediaSessionManager?.getActiveSessions(component)
             if (controllers != null && controllers.isNotEmpty()) {
                 attachToController(controllers[0])
@@ -49,7 +56,7 @@ class IslandNotificationListenerService : NotificationListenerService() {
     private fun attachToController(controller: MediaController) {
         detachController()
         activeController = controller
-        
+
         mediaCallback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 updateMediaState(controller)
@@ -58,7 +65,7 @@ class IslandNotificationListenerService : NotificationListenerService() {
                 updateMediaState(controller)
             }
         }
-        
+
         controller.registerCallback(mediaCallback!!)
         updateMediaState(controller)
     }
@@ -74,31 +81,30 @@ class IslandNotificationListenerService : NotificationListenerService() {
         val playbackState = controller.playbackState
         val isPlaying = playbackState?.state == PlaybackState.STATE_PLAYING
 
-        if (metadata != null) {
-            val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE) ?: ""
-            val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""
-            val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
-            val position = playbackState?.position ?: 0L
-            val progress = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: ""
+        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""
+        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        val position = playbackState?.position ?: 0L
+        val progress = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
 
-            IslandStateHolder.mediaData = IslandMediaData(
-                title = title,
-                artist = artist,
-                isPlaying = isPlaying,
-                progress = progress,
-                elapsed = formatTime(position),
-                remaining = if (duration > 0) "-${formatTime(duration - position)}" else "0:00"
-            )
+        sendMediaBroadcast(
+            title, artist, isPlaying, progress,
+            formatTime(position),
+            if (duration > 0) "-${formatTime(duration - position)}" else "0:00"
+        )
+    }
 
-            if (isPlaying) {
-                IslandStateHolder.currentState = IslandState.MUSIC_COMPACT
-            }
+    private fun sendMediaBroadcast(title: String, artist: String, isPlaying: Boolean, progress: Float, elapsed: String, remaining: String) {
+        val intent = Intent(ACTION_MEDIA_UPDATE).apply {
+            putExtra(EXTRA_TITLE, title)
+            putExtra(EXTRA_ARTIST, artist)
+            putExtra(EXTRA_IS_PLAYING, isPlaying)
+            putExtra(EXTRA_PROGRESS, progress)
+            putExtra(EXTRA_ELAPSED, elapsed)
+            putExtra(EXTRA_REMAINING, remaining)
         }
-
-        if (!isPlaying && IslandStateHolder.currentState == IslandState.MUSIC_COMPACT) {
-            // Mantener compacto por un momento tras pausar, luego volver a IDLE
-            IslandStateHolder.currentState = IslandState.IDLE
-        }
+        sendBroadcast(intent)
+        Log.d("IslandNLS", "Media broadcast: $title - $artist playing=$isPlaying")
     }
 
     private fun formatTime(ms: Long): String {
@@ -109,18 +115,17 @@ class IslandNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        // Las notificaciones de media se manejan vía MediaSessionManager
-        // Aquí podríamos manejar llamadas, timers, etc.
         Log.d("IslandNLS", "Notificación de: ${sbn.packageName}")
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        Log.d("IslandNLS", "Notificación removida de: ${sbn.packageName}")
+        Log.d("IslandNLS", "Notificación removida: ${sbn.packageName}")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         detachController()
         mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionListener)
+        Log.d("IslandNLS", "NotificationListener desconectado")
     }
 }
