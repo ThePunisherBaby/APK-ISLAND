@@ -634,17 +634,28 @@ private fun ProgressBar(progress: Float) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  AURA CROMÁTICA GEMINI CLÁSICA (Google Multicolor, Giroscopio y 120Hz)
+//  AURA CROMÁTICA GEMINI ORGÁNICA (Muy difuminada, compacta y viva)
 // ═══════════════════════════════════════════════════════════════════════
-private val GeminiClassicColorsInt = intArrayOf(
-    0xFF4285F4.toInt(), // Google Blue
-    0xFF00E5FF.toInt(), // Electric Cyan
-    0xFF34A853.toInt(), // Google Green
-    0xFFFBBC05.toInt(), // Google Yellow
-    0xFFFF6D00.toInt(), // Warm Orange
-    0xFFEA4335.toInt(), // Google Red
-    0xFF9C27B0.toInt(), // Gemini Violet
-    0xFF4285F4.toInt()  // Cierre seamless continuo
+// Espectro orgánico no uniforme con transiciones fluidas estilo aurora
+private val GeminiOrganicColorsInt = intArrayOf(
+    0xFF1A73E8.toInt(), // Azul Google profundo
+    0xFF00B0FF.toInt(), // Cian resplandeciente
+    0xFF00E5FF.toInt(), // Cian eléctrico
+    0xFF00C853.toInt(), // Verde esmeralda vivo
+    0xFF34A853.toInt(), // Verde Google
+    0xFFFBBC05.toInt(), // Amarillo cálido
+    0xFFFF9100.toInt(), // Ámbar dorado
+    0xFFFF3D00.toInt(), // Naranja fuego
+    0xFFEA4335.toInt(), // Rojo coral Google
+    0xFFD81B60.toInt(), // Rosa magenta
+    0xFF8E24AA.toInt(), // Púrpura cósmico
+    0xFF536DFE.toInt(), // Azul índigo
+    0xFF1A73E8.toInt()  // Cierre seamless
+)
+
+// Posiciones no lineales para que el gradiente se sienta asimétrico y orgánico
+private val GeminiOrganicPositions = floatArrayOf(
+    0.00f, 0.08f, 0.18f, 0.30f, 0.40f, 0.52f, 0.62f, 0.72f, 0.80f, 0.88f, 0.94f, 0.98f, 1.00f
 )
 
 @Composable
@@ -659,53 +670,85 @@ private fun GeminiChromaticAura(
     val pillHeightPx = with(density) { pillHeight.toPx() }
     val cornerPx = with(density) { corner.toPx() }
 
-    Canvas(modifier = Modifier.size(pillWidth + 24.dp, pillHeight + 24.dp)) {
-        val left = (size.width - pillWidthPx) / 2f
-        val top = (size.height - pillHeightPx) / 2f
-        val pillCenter = Offset(left + pillWidthPx / 2f, top + pillHeightPx / 2f)
+    // Respiración orgánica suave para que el aura se sienta viva
+    val infiniteTransition = rememberInfiniteTransition(label = "aura_breathe")
+    val breathe by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathe"
+    )
 
-        // Matriz de sombreador interna: los colores giran alrededor del centro
-        // pero la geometría de la píldora se mantiene 100% HORIZONTAL (¡sin inclinarse en diagonal!)
-        val sweepShader = android.graphics.SweepGradient(
-            pillCenter.x,
-            pillCenter.y,
-            GeminiClassicColorsInt,
-            null
-        )
-        val matrix = android.graphics.Matrix()
-        matrix.setRotate(rotationAngle, pillCenter.x, pillCenter.y)
-        sweepShader.setLocalMatrix(matrix)
-        val sweepBrush = ShaderBrush(sweepShader)
+    Box(
+        modifier = Modifier.size(pillWidth + 24.dp, pillHeight + 24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // CAPA 1: Resplandor difuminado profundo (Melt blur de 12dp en GPU sin bordes rígidos)
+        Canvas(
+            modifier = Modifier
+                .size(pillWidth + 24.dp, pillHeight + 24.dp)
+                .blur(12.dp)
+        ) {
+            val left = (size.width - pillWidthPx) / 2f
+            val top = (size.height - pillHeightPx) / 2f
+            val pillCenter = Offset(left + pillWidthPx / 2f, top + pillHeightPx / 2f)
 
-        // 1. Resplandor difuso que emana de ATRÁS del notch (Halo exterior amplio)
-        drawRoundRect(
-            brush = sweepBrush,
-            topLeft = Offset(left - 3.5.dp.toPx(), top - 3.5.dp.toPx()),
-            size = Size(pillWidthPx + 7.dp.toPx(), pillHeightPx + 7.dp.toPx()),
-            cornerRadius = CornerRadius(cornerPx + 3.5.dp.toPx(), cornerPx + 3.5.dp.toPx()),
-            style = Stroke(width = 7.dp.toPx()),
-            alpha = 0.35f
-        )
+            val sweepShader = android.graphics.SweepGradient(
+                pillCenter.x,
+                pillCenter.y,
+                GeminiOrganicColorsInt,
+                GeminiOrganicPositions
+            )
+            val matrix = android.graphics.Matrix()
+            matrix.setRotate(rotationAngle, pillCenter.x, pillCenter.y)
+            sweepShader.setLocalMatrix(matrix)
+            val sweepBrush = ShaderBrush(sweepShader)
 
-        // 2. Capa intermedia cromática que brota del borde
-        drawRoundRect(
-            brush = sweepBrush,
-            topLeft = Offset(left - 1.5.dp.toPx(), top - 1.5.dp.toPx()),
-            size = Size(pillWidthPx + 3.dp.toPx(), pillHeightPx + 3.dp.toPx()),
-            cornerRadius = CornerRadius(cornerPx + 1.5.dp.toPx(), cornerPx + 1.5.dp.toPx()),
-            style = Stroke(width = 3.5.dp.toPx()),
-            alpha = 0.65f
-        )
+            // Trazo ceñido que gracias al blur de 12dp se disuelve en una niebla de luz suave
+            drawRoundRect(
+                brush = sweepBrush,
+                topLeft = Offset(left - 0.5.dp.toPx(), top - 0.5.dp.toPx()),
+                size = Size(pillWidthPx + 1.dp.toPx(), pillHeightPx + 1.dp.toPx()),
+                cornerRadius = CornerRadius(cornerPx + 0.5.dp.toPx(), cornerPx + 0.5.dp.toPx()),
+                style = Stroke(width = 5.dp.toPx()),
+                alpha = 0.58f * breathe
+            )
+        }
 
-        // 3. Contorno neón nítido al ras del notch horizontal
-        drawRoundRect(
-            brush = sweepBrush,
-            topLeft = Offset(left, top),
-            size = Size(pillWidthPx, pillHeightPx),
-            cornerRadius = CornerRadius(cornerPx, cornerPx),
-            style = Stroke(width = 1.8.dp.toPx()),
-            alpha = 0.95f
-        )
+        // CAPA 2: Difuminado medio compacto (4dp) para dar riqueza cromática al borde inmediato
+        Canvas(
+            modifier = Modifier
+                .size(pillWidth + 24.dp, pillHeight + 24.dp)
+                .blur(4.dp)
+        ) {
+            val left = (size.width - pillWidthPx) / 2f
+            val top = (size.height - pillHeightPx) / 2f
+            val pillCenter = Offset(left + pillWidthPx / 2f, top + pillHeightPx / 2f)
+
+            val sweepShader = android.graphics.SweepGradient(
+                pillCenter.x,
+                pillCenter.y,
+                GeminiOrganicColorsInt,
+                GeminiOrganicPositions
+            )
+            val matrix = android.graphics.Matrix()
+            matrix.setRotate(rotationAngle, pillCenter.x, pillCenter.y)
+            sweepShader.setLocalMatrix(matrix)
+            val sweepBrush = ShaderBrush(sweepShader)
+
+            // Trazo fino compacto al ras del notch
+            drawRoundRect(
+                brush = sweepBrush,
+                topLeft = Offset(left, top),
+                size = Size(pillWidthPx, pillHeightPx),
+                cornerRadius = CornerRadius(cornerPx, cornerPx),
+                style = Stroke(width = 2.dp.toPx()),
+                alpha = 0.65f * breathe
+            )
+        }
     }
 }
 
