@@ -102,10 +102,20 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         composeView = cv
 
         val displayMetrics = resources.displayMetrics
-        val pillHeightPx = (36 * displayMetrics.density).toInt()
-        // Subido unos píxeles (~4dp / 11px) hacia arriba
-        val cameraCenterY = (8.5f * displayMetrics.density).toInt()
-        val offsetY = cameraCenterY - (pillHeightPx / 2)
+        val density = displayMetrics.density
+
+        // Especificaciones físicas del Pixel 8 (1080x2400, 420dpi, density = 2.625):
+        // Hardware Cutout: Centro en Y = 65.75 px (25.05 dp), Diámetro = 72.5 px (27.6 dp)
+        val cameraCenterYPx = 65.75f
+
+        // La píldora de 34dp está centrada dentro de un contenedor con 12dp de margen para el blur:
+        // Centro de la píldora dentro del ComposeView = (12dp + 17dp) * density = 29dp * density
+        val pillHeightDp = 34f
+        val glowPaddingDp = 12f
+        val pillCenterInComposePx = (glowPaddingDp + (pillHeightDp / 2f)) * density
+
+        // Alineación concéntrica exacta al ras de la lente de la cámara
+        val offsetY = (cameraCenterYPx - pillCenterInComposePx).toInt()
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,

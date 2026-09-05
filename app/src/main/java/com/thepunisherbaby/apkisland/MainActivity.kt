@@ -25,7 +25,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Refrescar estado de permisos al volver a la app
+        if (Settings.canDrawOverlays(this)) {
+            startForegroundService(Intent(this, DynamicIslandService::class.java))
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -139,7 +139,7 @@ fun IslandUI() {
     }
     val targetH: Dp = when {
         isExpanded -> 180.dp
-        else       -> 36.dp
+        else       -> 34.dp
     }
     val targetCorner: Dp = when {
         isExpanded -> 38.dp
