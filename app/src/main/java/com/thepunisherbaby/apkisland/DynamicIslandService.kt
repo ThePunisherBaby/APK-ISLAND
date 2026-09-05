@@ -103,7 +103,8 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
 
         val displayMetrics = resources.displayMetrics
         val pillHeightPx = (36 * displayMetrics.density).toInt()
-        val cameraCenterY = (12.5f * displayMetrics.density).toInt()
+        // Subido unos píxeles (~4dp / 11px) hacia arriba
+        val cameraCenterY = (8.5f * displayMetrics.density).toInt()
         val offsetY = cameraCenterY - (pillHeightPx / 2)
 
         val params = WindowManager.LayoutParams(
