@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -40,11 +42,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thepunisherbaby.apkisland.R
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 // ─── Fuentes Custom ──────────────────────────────────────────────────
@@ -97,11 +102,27 @@ object IslandStateHolder {
     var callData by mutableStateOf(IslandCallData())
     var timerData by mutableStateOf(IslandTimerData())
     var currentArtwork by mutableStateOf<android.graphics.Bitmap?>(null)
-    var unlockTrigger by mutableLongStateOf(0L)
+    var isScreenOff by mutableStateOf(false)
+    var unlockEvent by mutableLongStateOf(0L)
     var gyroBias by mutableFloatStateOf(0f)
+    var screenRotation by mutableIntStateOf(android.view.Surface.ROTATION_0)
+    var idleAuraTrigger by mutableLongStateOf(0L)
+
+    fun onScreenOff() {
+        isScreenOff = true
+    }
+
+    fun onUnlock() {
+        isScreenOff = false
+        unlockEvent = System.currentTimeMillis()
+    }
+
+    fun triggerIdleAura() {
+        idleAuraTrigger = System.currentTimeMillis()
+    }
 
     fun triggerUnlock() {
-        unlockTrigger = System.currentTimeMillis()
+        onUnlock()
     }
 }
 
@@ -109,20 +130,7 @@ object IslandStateHolder {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun IslandUI() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var state by remember { mutableStateOf(IslandState.IDLE) }
-    var swipeAccum by remember { mutableFloatStateOf(0f) }
-
-    LaunchedEffect(IslandStateHolder.currentState) {
-        val systemState = IslandStateHolder.currentState
-        if (systemState != IslandState.IDLE) {
-            if (state == IslandState.IDLE) {
-                state = systemState
-            }
-        } else {
-            state = IslandState.IDLE
-        }
-    }
+    val state = IslandStateHolder.currentState
 
     val activeCompactStates = buildList {
         if (IslandStateHolder.mediaData.isPlaying) add(IslandState.MUSIC_COMPACT)
@@ -142,18 +150,34 @@ fun IslandUI() {
         IslandState.CALL_COMPACT
     )
 
-    // TAMAÑO INICIAL FIJO PARA IDLE Y COMPACTO (Aún menos ancha: 92dp)
+    // Estados de activación de aura temporal (por desbloqueo o toque en reposo)
+    var isIdleAuraActive by remember { mutableStateOf(false) }
+    var isUnlockAuraActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(IslandStateHolder.idleAuraTrigger) {
+        if (IslandStateHolder.idleAuraTrigger > 0L) {
+            isIdleAuraActive = true
+            delay(5500)
+            isIdleAuraActive = false
+        }
+    }
+
+    // Geometría basada en Retícula de Diseño (grid 4dp/8dp) y Píldora 100% redondeada
     val targetW: Dp = when {
         isExpanded -> 340.dp
-        else       -> 92.dp   
+        state == IslandState.MUSIC_COMPACT -> 144.dp
+        state == IslandState.TIMER_COMPACT || state == IslandState.CALL_COMPACT -> 112.dp
+        isIdleAuraActive || isUnlockAuraActive -> 88.dp
+        else -> 72.dp // Píldora de reposo simétrica sobre el orificio de la cámara
     }
     val targetH: Dp = when {
         isExpanded -> 180.dp
         else       -> 34.dp
     }
+    // Bordes 100% redondeados (radio = mitad de la altura = 17dp) para la cápsula en reposo y compacta
     val targetCorner: Dp = when {
-        isExpanded -> 38.dp
-        else       -> 50.dp
+        isExpanded -> 36.dp
+        else       -> 17.dp
     }
 
     val morphSpec: AnimationSpec<Dp> = spring(
@@ -164,7 +188,7 @@ fun IslandUI() {
     val height by animateDpAsState(targetH, morphSpec, label = "h")
     val corner by animateDpAsState(targetCorner, morphSpec, label = "c")
 
-    // Shift hacia abajo al expandir para no tapar iconos de la barra de estado
+    // Desplazamiento hacia abajo al expandir para respetar la barra de estado
     val expandOffsetY by animateDpAsState(
         targetValue = if (isExpanded) 18.dp else 0.dp,
         animationSpec = morphSpec,
@@ -177,7 +201,7 @@ fun IslandUI() {
         scaleAnim.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow))
     }
 
-    // Ya no hay outline rosa para música
+    // Brillo sutil por estado funcional
     val glowColor by animateColorAsState(
         targetValue = when (state) {
             IslandState.MUSIC_COMPACT, IslandState.MUSIC_EXPANDED -> Color.Transparent
@@ -190,10 +214,45 @@ fun IslandUI() {
         label = "glow"
     )
 
-    // Rotación fluida a 120Hz gobernada por física de giroscopio
+    // Animación de desbloqueo: arranca de 0 sin encogerse, con ráfaga de giro rápido
+    val unlockScaleX = remember { Animatable(1f) }
+    var spinBurst by remember { mutableFloatStateOf(0f) }
     var auraRotation by remember { mutableFloatStateOf(0f) }
     var smoothGyro by remember { mutableFloatStateOf(0f) }
 
+    // Silenciosamente resetea la escala a 0 al apagarse la pantalla en la oscuridad
+    LaunchedEffect(IslandStateHolder.isScreenOff) {
+        if (IslandStateHolder.isScreenOff) {
+            unlockScaleX.snapTo(0f)
+            isUnlockAuraActive = false
+        }
+    }
+
+    // Al desbloquear: brota desde la cámara de 0 a 1 con ráfaga inicial de alta velocidad
+    LaunchedEffect(IslandStateHolder.unlockEvent) {
+        if (IslandStateHolder.unlockEvent > 0L) {
+            isUnlockAuraActive = true
+            spinBurst = 850f // Giro súper rápido al despertar
+            unlockScaleX.snapTo(0f)
+            unlockScaleX.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessLow)
+            )
+            delay(4200)
+            isUnlockAuraActive = false
+        }
+    }
+
+    // Al tocar en reposo: ráfaga de giro y sutil rebote táctil
+    LaunchedEffect(IslandStateHolder.idleAuraTrigger) {
+        if (IslandStateHolder.idleAuraTrigger > 0L) {
+            spinBurst = 650f
+            scaleAnim.snapTo(0.92f)
+            scaleAnim.animateTo(1f, spring(dampingRatio = 0.45f))
+        }
+    }
+
+    // Bucle de física fluida a 120Hz gobernada por giroscopio y ráfaga con decaimiento
     LaunchedEffect(Unit) {
         var lastTime = System.nanoTime()
         while (true) {
@@ -201,63 +260,73 @@ fun IslandUI() {
                 val dt = ((now - lastTime) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
                 lastTime = now
 
-                // Suavizado del giroscopio para respuesta táctil orgánica
+                // Decaimiento exponencial de la ráfaga de giro
+                if (spinBurst > 1f) {
+                    spinBurst *= (1f - dt * 2.2f).coerceAtLeast(0f)
+                } else {
+                    spinBurst = 0f
+                }
+
+                // Suavizado del sensor giroscópico
                 val targetGyro = IslandStateHolder.gyroBias
                 smoothGyro += (targetGyro - smoothGyro) * 0.18f
 
-                // En reposo: gira en sentido de las agujas del reloj (~45°/s).
-                // Al inclinar a la izquierda (smoothGyro < 0): invierte la rotación en ese sentido.
-                // Al inclinar a la derecha (smoothGyro > 0): acelera en sentido horario.
-                val speed = 45f + (smoothGyro * 220f)
-                auraRotation = (auraRotation + speed * dt) % 360f
+                // Velocidad base (45°/s) + giroscopio + ráfaga de giro
+                val baseSpeed = 45f
+                val currentSpeed = baseSpeed + (smoothGyro * 220f) + spinBurst
+                auraRotation = (auraRotation + currentSpeed * dt) % 360f
                 if (auraRotation < 0f) auraRotation += 360f
             }
         }
     }
 
-    // Animación elástica horizontal (0 a 100) al desbloquear desde la cámara
-    val unlockScaleX = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        unlockScaleX.snapTo(0f)
-        unlockScaleX.animateTo(
-            targetValue = 1f,
-            animationSpec = spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessLow)
-        )
-    }
-    LaunchedEffect(IslandStateHolder.unlockTrigger) {
-        if (IslandStateHolder.unlockTrigger > 0L) {
-            unlockScaleX.snapTo(0f)
-            unlockScaleX.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessLow)
-            )
-        }
-    }
+    // Visibilidad del aura de colores vivos (música, desbloqueo o toque en reposo)
+    val isAuraVisible = isIdleAuraActive || isUnlockAuraActive || state == IslandState.MUSIC_COMPACT || state == IslandState.MUSIC_EXPANDED
+    val auraAlpha by animateFloatAsState(
+        targetValue = if (isAuraVisible) 1f else 0f,
+        animationSpec = tween(600),
+        label = "aura_alpha"
+    )
+
+    // Dimensiones exactas del contenedor que garantizan alineación concéntrica con el orificio de la cámara
+    val isLandscape = IslandStateHolder.screenRotation == android.view.Surface.ROTATION_90 ||
+                      IslandStateHolder.screenRotation == android.view.Surface.ROTATION_270
+    val pillW = if (isLandscape) height else width
+    val pillH = if (isLandscape) width else height
+    val boxWidth = pillW + 24.dp
+    val boxHeight = pillH + 24.dp
 
     Box(
         modifier = Modifier
-            .offset(y = expandOffsetY)
-            .width(width + 24.dp)
-            .height(height + 24.dp)
+            .offset(y = if (isLandscape) 0.dp else expandOffsetY)
+            .width(boxWidth)
+            .height(boxHeight)
             .graphicsLayer {
-                scaleX = unlockScaleX.value
+                if (isLandscape) {
+                    scaleX = 1f
+                    scaleY = unlockScaleX.value
+                } else {
+                    scaleX = unlockScaleX.value
+                    scaleY = 1f
+                }
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
             },
         contentAlignment = Alignment.Center
     ) {
-        // Aura Cromática Gemini fluida y reactiva al giroscopio
+        // Aura Cromática Gemini Abstracta y Contrarrotatoria con colores híper vívidos
         GeminiChromaticAura(
-            pillWidth = width,
-            pillHeight = height,
+            pillWidth = pillW,
+            pillHeight = pillH,
             corner = corner,
-            rotationAngle = auraRotation
+            rotationAngle = auraRotation,
+            alpha = auraAlpha
         )
 
         if (glowColor != Color.Transparent) {
             Box(
                 modifier = Modifier
-                    .width(width + 2.dp)
-                    .height(height + 2.dp)
+                    .width(pillW + 2.dp)
+                    .height(pillH + 2.dp)
                     .clip(RoundedCornerShape(corner))
                     .background(glowColor)
                     .blur(12.dp)
@@ -266,63 +335,26 @@ fun IslandUI() {
 
         Box(
             modifier = Modifier
-                .width(width)
-                .height(height)
+                .width(pillW)
+                .height(pillH)
                 .graphicsLayer {
                     scaleX = scaleAnim.value
                     scaleY = scaleAnim.value
                 }
                 .clip(RoundedCornerShape(corner))
                 .background(OledBlack)
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            if (swipeAccum.absoluteValue > 80f && isCompact && activeCompactStates.size > 1) {
-                                compactIndex = if (swipeAccum > 0) {
-                                    (compactIndex + 1) % activeCompactStates.size
-                                } else {
-                                    (compactIndex - 1 + activeCompactStates.size) % activeCompactStates.size
+                .then(
+                    if (state == IslandState.IDLE) {
+                        Modifier.pointerInput(state) {
+                            detectTapGestures(
+                                onTap = {
+                                    android.util.Log.d("IslandUI", "Tap en IDLE detectado -> invocando aura!")
+                                    IslandStateHolder.triggerIdleAura()
                                 }
-                                state = activeCompactStates[compactIndex]
-                            }
-                            swipeAccum = 0f
+                            )
                         }
-                    ) { change, amount ->
-                        change.consume()
-                        swipeAccum += amount
-                    }
-                }
-                .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {
-                        // Un toque simple abre la app de origen o colapsa si está expandida
-                        when (state) {
-                            IslandState.MUSIC_COMPACT -> {
-                                val pkg = IslandStateHolder.mediaData.packageName
-                                if (pkg.isNotEmpty()) {
-                                    val intent = context.packageManager.getLaunchIntentForPackage(pkg)
-                                    if (intent != null) {
-                                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        context.startActivity(intent)
-                                    }
-                                }
-                            }
-                            IslandState.MUSIC_EXPANDED -> state = IslandState.MUSIC_COMPACT
-                            IslandState.TIMER_EXPANDED -> state = IslandState.TIMER_COMPACT
-                            IslandState.CALL_EXPANDED  -> state = IslandState.CALL_COMPACT
-                            else -> {}
-                        }
-                    },
-                    onLongClick = {
-                        // Presión larga expande la isla
-                        state = when (state) {
-                            IslandState.MUSIC_COMPACT  -> IslandState.MUSIC_EXPANDED
-                            IslandState.TIMER_COMPACT  -> IslandState.TIMER_EXPANDED
-                            IslandState.CALL_COMPACT   -> IslandState.CALL_EXPANDED
-                            IslandState.LOCK_ANIM      -> IslandState.IDLE
-                            else -> state
-                        }
+                    } else {
+                        Modifier
                     }
                 ),
             contentAlignment = Alignment.Center
@@ -330,7 +362,12 @@ fun IslandUI() {
             when (state) {
                 IslandState.IDLE           -> { }
                 IslandState.LOCK_ANIM      -> LockAnimation()
-                IslandState.MUSIC_COMPACT  -> MusicCompactContent(IslandStateHolder.mediaData, IslandStateHolder.currentArtwork)
+                IslandState.MUSIC_COMPACT  -> MusicCompactContent(
+                    data = IslandStateHolder.mediaData, 
+                    artwork = IslandStateHolder.currentArtwork,
+                    isLandscape = isLandscape,
+                    onExpand = { IslandStateHolder.currentState = IslandState.MUSIC_EXPANDED }
+                )
                 IslandState.MUSIC_EXPANDED -> MusicExpandedContent(IslandStateHolder.mediaData, IslandStateHolder.currentArtwork)
                 IslandState.TIMER_COMPACT  -> TimerCompactContent(IslandStateHolder.timerData)
                 IslandState.TIMER_EXPANDED -> TimerExpandedContent(IslandStateHolder.timerData)
@@ -342,33 +379,166 @@ fun IslandUI() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  MÚSICA – COMPACTO 
+//  MÚSICA – COMPACTO (Soporta swipe elástico a la izq / der para cambiar canción)
 // ═══════════════════════════════════════════════════════════════════════
 @Composable
-private fun MusicCompactContent(data: IslandMediaData, artwork: android.graphics.Bitmap?) {
-    Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        if (artwork != null) {
-            Image(
-                bitmap = artwork.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(28.dp).clip(CircleShape)
-            )
-        } else {
-            Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF2C2C2E)))
+private fun MusicCompactContent(
+    data: IslandMediaData, 
+    artwork: android.graphics.Bitmap?,
+    isLandscape: Boolean = false,
+    onExpand: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val dragOffset = remember { Animatable(0f) }
+    var swipeTotal by remember { mutableFloatStateOf(0f) }
+
+    val contentModifier = if (isLandscape) {
+        Modifier
+            .fillMaxSize()
+            .padding(vertical = 6.dp)
+            .offset { IntOffset(0, dragOffset.value.roundToInt()) }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragStart = { swipeTotal = 0f },
+                    onDragEnd = {
+                        if (swipeTotal > 20f) {
+                            android.util.Log.d("IslandUI", "Swipe vertical abajo -> skipToNext()")
+                            com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService.skipToNext()
+                        } else if (swipeTotal < -20f) {
+                            android.util.Log.d("IslandUI", "Swipe vertical arriba -> skipToPrevious()")
+                            com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService.skipToPrevious()
+                        }
+                        swipeTotal = 0f
+                        coroutineScope.launch {
+                            dragOffset.animateTo(0f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium))
+                        }
+                    },
+                    onDragCancel = {
+                        swipeTotal = 0f
+                        coroutineScope.launch { dragOffset.animateTo(0f) }
+                    }
+                ) { change, dragAmount ->
+                    change.consume()
+                    swipeTotal += dragAmount
+                    coroutineScope.launch {
+                        dragOffset.snapTo(dragOffset.value + dragAmount * 0.4f)
+                    }
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        if (data.packageName.isNotEmpty()) {
+                            val intent = context.packageManager.getLaunchIntentForPackage(data.packageName)
+                            if (intent != null) {
+                                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            }
+                        }
+                    },
+                    onLongPress = { onExpand() }
+                )
+            }
+    } else {
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 6.dp)
+            .offset { IntOffset(dragOffset.value.roundToInt(), 0) }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { swipeTotal = 0f },
+                    onDragEnd = {
+                        if (swipeTotal > 20f) {
+                            android.util.Log.d("IslandUI", "Swipe horizontal derecha -> skipToNext()")
+                            com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService.skipToNext()
+                        } else if (swipeTotal < -20f) {
+                            android.util.Log.d("IslandUI", "Swipe horizontal izquierda -> skipToPrevious()")
+                            com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService.skipToPrevious()
+                        }
+                        swipeTotal = 0f
+                        coroutineScope.launch {
+                            dragOffset.animateTo(0f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium))
+                        }
+                    },
+                    onDragCancel = {
+                        swipeTotal = 0f
+                        coroutineScope.launch { dragOffset.animateTo(0f) }
+                    }
+                ) { change, dragAmount ->
+                    change.consume()
+                    swipeTotal += dragAmount
+                    coroutineScope.launch {
+                        dragOffset.snapTo(dragOffset.value + dragAmount * 0.4f)
+                    }
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        if (data.packageName.isNotEmpty()) {
+                            val intent = context.packageManager.getLaunchIntentForPackage(data.packageName)
+                            if (intent != null) {
+                                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            }
+                        }
+                    },
+                    onLongPress = { onExpand() }
+                )
+            }
+    }
+
+    if (isLandscape) {
+        Column(
+            modifier = contentModifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            if (artwork != null) {
+                Image(
+                    bitmap = artwork.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(24.dp).clip(CircleShape)
+                )
+            } else {
+                Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color(0xFF2C2C2E)))
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            if (data.isPlaying) {
+                EqualizerBars(barCount = 3, barWidth = 2.5.dp, maxHeight = 14.dp, color = Color(0xFF1DB954))
+            } else {
+                Spacer(Modifier.size(20.dp))
+            }
         }
-        
-        Spacer(Modifier.weight(1f))
-        
-        if (data.isPlaying) {
-            EqualizerBars(barCount = 3, barWidth = 3.dp, maxHeight = 16.dp, color = Color(0xFF1DB954))
-            Spacer(Modifier.width(4.dp))
-        } else {
-            Spacer(Modifier.size(24.dp)) 
+    } else {
+        Row(
+            modifier = contentModifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            if (artwork != null) {
+                Image(
+                    bitmap = artwork.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(28.dp).clip(CircleShape)
+                )
+            } else {
+                Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF2C2C2E)))
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            if (data.isPlaying) {
+                EqualizerBars(barCount = 3, barWidth = 3.dp, maxHeight = 16.dp, color = Color(0xFF1DB954))
+                Spacer(Modifier.width(4.dp))
+            } else {
+                Spacer(Modifier.size(24.dp)) 
+            }
         }
     }
 }
@@ -433,9 +603,39 @@ private fun MusicExpandedContent(data: IslandMediaData, artwork: android.graphic
             Text(data.remaining, color = Color(0xFF8E8E93), fontSize = 11.sp, fontFamily = PoppinsFontFamily)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            Text("⏮", color = Color.White, fontSize = 22.sp)
-            Text(if (data.isPlaying) "⏸" else "▶", color = Color.White, fontSize = 28.sp)
-            Text("⏭", color = Color.White, fontSize = 22.sp)
+            Text(
+                "⏮", 
+                color = Color.White, 
+                fontSize = 24.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService.skipToPrevious()
+                    }
+                    .padding(8.dp)
+            )
+            Text(
+                if (data.isPlaying) "⏸" else "▶", 
+                color = Color.White, 
+                fontSize = 30.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService.playPause()
+                    }
+                    .padding(8.dp)
+            )
+            Text(
+                "⏭", 
+                color = Color.White, 
+                fontSize = 24.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        com.thepunisherbaby.apkisland.logic.IslandNotificationListenerService.skipToNext()
+                    }
+                    .padding(8.dp)
+            )
         }
     }
 }
@@ -634,28 +834,39 @@ private fun ProgressBar(progress: Float) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  AURA CROMÁTICA GEMINI ORGÁNICA (Muy difuminada, compacta y viva)
+//  AURA CROMÁTICA GEMINI ABSTRACTA Y CONTRARROTATORIA (Hipervívida y orgánica)
 // ═══════════════════════════════════════════════════════════════════════
-// Espectro orgánico no uniforme con transiciones fluidas estilo aurora
-private val GeminiOrganicColorsInt = intArrayOf(
-    0xFF1A73E8.toInt(), // Azul Google profundo
-    0xFF00B0FF.toInt(), // Cian resplandeciente
-    0xFF00E5FF.toInt(), // Cian eléctrico
-    0xFF00C853.toInt(), // Verde esmeralda vivo
-    0xFF34A853.toInt(), // Verde Google
-    0xFFFBBC05.toInt(), // Amarillo cálido
-    0xFFFF9100.toInt(), // Ámbar dorado
-    0xFFFF3D00.toInt(), // Naranja fuego
-    0xFFEA4335.toInt(), // Rojo coral Google
-    0xFFD81B60.toInt(), // Rosa magenta
-    0xFF8E24AA.toInt(), // Púrpura cósmico
-    0xFF536DFE.toInt(), // Azul índigo
-    0xFF1A73E8.toInt()  // Cierre seamless
+
+// Capa A: Sentido Horario (Espectro Eléctrico Frío / Cósmico con tonos vivos de Google)
+private val GeminiCoolVividColorsInt = intArrayOf(
+    0xFF0066FF.toInt(), // Azul Eléctrico Profundo
+    0xFF00B0FF.toInt(), // Cian Neón Resplandeciente
+    0xFF00F5FF.toInt(), // Cian Espectral
+    0xFF00FF88.toInt(), // Verde Neón Menta
+    0xFF76FF03.toInt(), // Lima Ácido Vivo
+    0xFFFFEA00.toInt(), // Amarillo Solar Neón
+    0xFF0066FF.toInt()  // Cierre seamless
 )
 
-// Posiciones no lineales para que el gradiente se sienta asimétrico y orgánico
-private val GeminiOrganicPositions = floatArrayOf(
-    0.00f, 0.08f, 0.18f, 0.30f, 0.40f, 0.52f, 0.62f, 0.72f, 0.80f, 0.88f, 0.94f, 0.98f, 1.00f
+// Posiciones asimétricas no lineales para romper la uniformidad de rueda mecánica
+private val GeminiCoolVividPositions = floatArrayOf(
+    0.00f, 0.16f, 0.38f, 0.62f, 0.86f, 0.95f, 1.00f
+)
+
+// Capa B: Sentido Antihorario (Espectro Cálido / Fuego / Magenta Ultravioleta)
+private val GeminiWarmVividColorsInt = intArrayOf(
+    0xFFFF0033.toInt(), // Carmesí Neón Fuego
+    0xFFFF5500.toInt(), // Naranja Llamarada
+    0xFFFF00D4.toInt(), // Magenta Eléctrico Hipervívido
+    0xFF9C27B0.toInt(), // Púrpura Orquídea Intenso
+    0xFF7928CA.toInt(), // Púrpura Ultravioleta Cósmico
+    0xFF3D5AFE.toInt(), // Índigo Eléctrico
+    0xFFFF0033.toInt()  // Cierre seamless
+)
+
+// Posiciones asimétricas distintas para la Capa B (exactamente 7 elementos)
+private val GeminiWarmVividPositions = floatArrayOf(
+    0.00f, 0.18f, 0.38f, 0.58f, 0.75f, 0.90f, 1.00f
 )
 
 @Composable
@@ -663,20 +874,23 @@ private fun GeminiChromaticAura(
     pillWidth: Dp,
     pillHeight: Dp,
     corner: Dp,
-    rotationAngle: Float
+    rotationAngle: Float,
+    alpha: Float = 1f
 ) {
+    if (alpha <= 0.01f) return
+
     val density = androidx.compose.ui.platform.LocalDensity.current
     val pillWidthPx = with(density) { pillWidth.toPx() }
     val pillHeightPx = with(density) { pillHeight.toPx() }
     val cornerPx = with(density) { corner.toPx() }
 
-    // Respiración orgánica suave para que el aura se sienta viva
+    // Respiración orgánica suave para dinamismo continuo
     val infiniteTransition = rememberInfiniteTransition(label = "aura_breathe")
     val breathe by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.12f,
+        initialValue = 0.88f,
+        targetValue = 1.15f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2800, easing = FastOutSlowInEasing),
+            animation = tween(2400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "breathe"
@@ -686,11 +900,11 @@ private fun GeminiChromaticAura(
         modifier = Modifier.size(pillWidth + 24.dp, pillHeight + 24.dp),
         contentAlignment = Alignment.Center
     ) {
-        // CAPA 1: Resplandor difuminado profundo (Melt blur de 12dp en GPU sin bordes rígidos)
+        // CAPA 1: Sentido Horario - Resplandor difuminado profundo (14dp blur)
         Canvas(
             modifier = Modifier
                 .size(pillWidth + 24.dp, pillHeight + 24.dp)
-                .blur(12.dp)
+                .blur(14.dp)
         ) {
             val left = (size.width - pillWidthPx) / 2f
             val top = (size.height - pillHeightPx) / 2f
@@ -699,30 +913,30 @@ private fun GeminiChromaticAura(
             val sweepShader = android.graphics.SweepGradient(
                 pillCenter.x,
                 pillCenter.y,
-                GeminiOrganicColorsInt,
-                GeminiOrganicPositions
+                GeminiCoolVividColorsInt,
+                GeminiCoolVividPositions
             )
             val matrix = android.graphics.Matrix()
             matrix.setRotate(rotationAngle, pillCenter.x, pillCenter.y)
             sweepShader.setLocalMatrix(matrix)
-            val sweepBrush = ShaderBrush(sweepShader)
 
-            // Trazo ceñido que gracias al blur de 12dp se disuelve en una niebla de luz suave
             drawRoundRect(
-                brush = sweepBrush,
+                brush = ShaderBrush(sweepShader),
                 topLeft = Offset(left - 0.5.dp.toPx(), top - 0.5.dp.toPx()),
                 size = Size(pillWidthPx + 1.dp.toPx(), pillHeightPx + 1.dp.toPx()),
                 cornerRadius = CornerRadius(cornerPx + 0.5.dp.toPx(), cornerPx + 0.5.dp.toPx()),
-                style = Stroke(width = 5.dp.toPx()),
-                alpha = 0.58f * breathe
+                style = Stroke(width = 6.dp.toPx()),
+                alpha = 0.72f * alpha * breathe
             )
         }
 
-        // CAPA 2: Difuminado medio compacto (4dp) para dar riqueza cromática al borde inmediato
+        // CAPA 2: Sentido Antihorario - Vórtice complementario dinámico (8dp blur)
+        // Al girar en sentido inverso (-rotationAngle * 0.82f), los colores cálidos y fríos se cruzan
+        // produciendo mezclas abstractas vivas en constante mutación
         Canvas(
             modifier = Modifier
                 .size(pillWidth + 24.dp, pillHeight + 24.dp)
-                .blur(4.dp)
+                .blur(8.dp)
         ) {
             val left = (size.width - pillWidthPx) / 2f
             val top = (size.height - pillHeightPx) / 2f
@@ -731,22 +945,50 @@ private fun GeminiChromaticAura(
             val sweepShader = android.graphics.SweepGradient(
                 pillCenter.x,
                 pillCenter.y,
-                GeminiOrganicColorsInt,
-                GeminiOrganicPositions
+                GeminiWarmVividColorsInt,
+                GeminiWarmVividPositions
             )
             val matrix = android.graphics.Matrix()
-            matrix.setRotate(rotationAngle, pillCenter.x, pillCenter.y)
+            matrix.setRotate(-rotationAngle * 0.82f, pillCenter.x, pillCenter.y)
             sweepShader.setLocalMatrix(matrix)
-            val sweepBrush = ShaderBrush(sweepShader)
 
-            // Trazo fino compacto al ras del notch
             drawRoundRect(
-                brush = sweepBrush,
+                brush = ShaderBrush(sweepShader),
+                topLeft = Offset(left, top),
+                size = Size(pillWidthPx, pillHeightPx),
+                cornerRadius = CornerRadius(cornerPx, cornerPx),
+                style = Stroke(width = 4.5.dp.toPx()),
+                alpha = 0.68f * alpha * breathe
+            )
+        }
+
+        // CAPA 3: Borde ceñido de alta definición (2.5dp blur) al ras del notch
+        Canvas(
+            modifier = Modifier
+                .size(pillWidth + 24.dp, pillHeight + 24.dp)
+                .blur(2.5.dp)
+        ) {
+            val left = (size.width - pillWidthPx) / 2f
+            val top = (size.height - pillHeightPx) / 2f
+            val pillCenter = Offset(left + pillWidthPx / 2f, top + pillHeightPx / 2f)
+
+            val sweepShader = android.graphics.SweepGradient(
+                pillCenter.x,
+                pillCenter.y,
+                GeminiCoolVividColorsInt,
+                GeminiCoolVividPositions
+            )
+            val matrix = android.graphics.Matrix()
+            matrix.setRotate(rotationAngle * 1.25f, pillCenter.x, pillCenter.y)
+            sweepShader.setLocalMatrix(matrix)
+
+            drawRoundRect(
+                brush = ShaderBrush(sweepShader),
                 topLeft = Offset(left, top),
                 size = Size(pillWidthPx, pillHeightPx),
                 cornerRadius = CornerRadius(cornerPx, cornerPx),
                 style = Stroke(width = 2.dp.toPx()),
-                alpha = 0.65f * breathe
+                alpha = 0.82f * alpha * breathe
             )
         }
     }

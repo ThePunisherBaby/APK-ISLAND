@@ -1,7 +1,9 @@
 package com.thepunisherbaby.apkisland.logic
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -9,10 +11,87 @@ import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import android.view.KeyEvent
 
 class IslandNotificationListenerService : NotificationListenerService() {
 
+    companion object {
+        var instance: IslandNotificationListenerService? = null
+            private set
 
+        fun getBestController(): MediaController? {
+            val inst = instance ?: return null
+            if (inst.activeController != null) return inst.activeController
+            return try {
+                val component = ComponentName(inst, IslandNotificationListenerService::class.java)
+                val controllers = inst.mediaSessionManager?.getActiveSessions(component)
+                controllers?.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+                    ?: controllers?.firstOrNull()
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        private fun sendMediaKeyEvent(keyCode: Int) {
+            try {
+                val audioManager = instance?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                val eventDown = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
+                val eventUp = KeyEvent(KeyEvent.ACTION_UP, keyCode)
+                audioManager?.dispatchMediaKeyEvent(eventDown)
+                audioManager?.dispatchMediaKeyEvent(eventUp)
+                Log.d("IslandNLS", "MediaKeyEvent $keyCode enviado vía AudioManager")
+            } catch (e: Exception) {
+                Log.e("IslandNLS", "Error enviando MediaKeyEvent $keyCode", e)
+            }
+        }
+
+        fun skipToNext() {
+            try {
+                val controller = getBestController()
+                if (controller != null) {
+                    controller.transportControls?.skipToNext()
+                    Log.d("IslandNLS", "skipToNext enviado a ${controller.packageName}")
+                } else {
+                    sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_NEXT)
+                }
+            } catch (e: Exception) {
+                Log.e("IslandNLS", "Error al enviar skipToNext, usando fallback", e)
+                sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_NEXT)
+            }
+        }
+
+        fun skipToPrevious() {
+            try {
+                val controller = getBestController()
+                if (controller != null) {
+                    controller.transportControls?.skipToPrevious()
+                    Log.d("IslandNLS", "skipToPrevious enviado a ${controller.packageName}")
+                } else {
+                    sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+                }
+            } catch (e: Exception) {
+                Log.e("IslandNLS", "Error al enviar skipToPrevious, usando fallback", e)
+                sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            }
+        }
+
+        fun playPause() {
+            try {
+                val controller = getBestController()
+                val state = controller?.playbackState?.state
+                if (state == PlaybackState.STATE_PLAYING) {
+                    controller.transportControls?.pause()
+                } else if (controller != null) {
+                    controller.transportControls?.play()
+                } else {
+                    sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                }
+            } catch (e: Exception) {
+                Log.e("IslandNLS", "Error al alternar play/pause", e)
+                sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            }
+        }
+    }
 
     private var mediaSessionManager: MediaSessionManager? = null
     private var activeController: MediaController? = null
@@ -20,7 +99,8 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
     private val sessionListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         if (controllers != null && controllers.isNotEmpty()) {
-            attachToController(controllers[0])
+            val playing = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: controllers[0]
+            attachToController(playing)
         } else {
             detachController()
             com.thepunisherbaby.apkisland.ui.IslandStateHolder.mediaData = com.thepunisherbaby.apkisland.ui.IslandMediaData()
@@ -33,6 +113,7 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        instance = this
         Log.d("IslandNLS", "NotificationListener conectado!")
 
         try {
@@ -42,7 +123,8 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
             val controllers = mediaSessionManager?.getActiveSessions(component)
             if (controllers != null && controllers.isNotEmpty()) {
-                attachToController(controllers[0])
+                val playing = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: controllers[0]
+                attachToController(playing)
             }
         } catch (e: Exception) {
             Log.e("IslandNLS", "Error al iniciar media listener", e)
@@ -88,6 +170,8 @@ class IslandNotificationListenerService : NotificationListenerService() {
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
             
+        Log.d("IslandNLS", "updateMediaState: isPlaying=$isPlaying, title=$title, artist=$artist, currentState=${com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentState}")
+
         com.thepunisherbaby.apkisland.ui.IslandStateHolder.currentArtwork = artwork
 
         com.thepunisherbaby.apkisland.ui.IslandStateHolder.mediaData = com.thepunisherbaby.apkisland.ui.IslandMediaData(
@@ -116,6 +200,17 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         Log.d("IslandNLS", "Notificación de: ${sbn.packageName}")
+
+        try {
+            val component = ComponentName(this, IslandNotificationListenerService::class.java)
+            val controllers = mediaSessionManager?.getActiveSessions(component)
+            val playing = controllers?.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            if (playing != null && playing != activeController) {
+                attachToController(playing)
+            }
+        } catch (e: Exception) {
+            // Ignorar
+        }
         
         // Dump all deskclock/timer notifications for reverse engineering
         if (sbn.packageName.contains("deskclock") || sbn.packageName.contains("clock")) {
@@ -156,8 +251,14 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        if (instance == this) instance = null
         detachController()
         mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionListener)
         Log.d("IslandNLS", "NotificationListener desconectado")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (instance == this) instance = null
     }
 }
