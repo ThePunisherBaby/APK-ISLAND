@@ -48,6 +48,14 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         get() = store
 
 
+    private val unlockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_USER_PRESENT || intent?.action == Intent.ACTION_SCREEN_ON) {
+                IslandStateHolder.triggerUnlock()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         savedStateRegistryController.performRestore(null)
@@ -56,7 +64,11 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         startForegroundNotification()
 
-
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        registerReceiver(unlockReceiver, filter)
 
         if (Settings.canDrawOverlays(this)) {
             addIslandView()
@@ -137,6 +149,11 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(unlockReceiver)
+        } catch (e: Exception) {
+            // No registrado
+        }
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         composeView?.let {
             windowManager.removeView(it)

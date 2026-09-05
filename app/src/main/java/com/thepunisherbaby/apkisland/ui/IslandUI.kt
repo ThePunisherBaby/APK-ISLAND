@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -93,6 +94,11 @@ object IslandStateHolder {
     var callData by mutableStateOf(IslandCallData())
     var timerData by mutableStateOf(IslandTimerData())
     var currentArtwork by mutableStateOf<android.graphics.Bitmap?>(null)
+    var unlockTrigger by mutableLongStateOf(0L)
+
+    fun triggerUnlock() {
+        unlockTrigger = System.currentTimeMillis()
+    }
 }
 
 // ─── Composable raíz ─────────────────────────────────────────────────
@@ -180,13 +186,43 @@ fun IslandUI() {
         label = "glow"
     )
 
+    // Animación elástica horizontal (0 a 100) al desbloquear desde la cámara
+    val unlockScaleX = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        unlockScaleX.snapTo(0f)
+        unlockScaleX.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessLow)
+        )
+    }
+    LaunchedEffect(IslandStateHolder.unlockTrigger) {
+        if (IslandStateHolder.unlockTrigger > 0L) {
+            unlockScaleX.snapTo(0f)
+            unlockScaleX.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessLow)
+            )
+        }
+    }
+
     Box(
         modifier = Modifier
             .offset(y = expandOffsetY)
             .width(width + 24.dp)
-            .height(height + 24.dp),
+            .height(height + 24.dp)
+            .graphicsLayer {
+                scaleX = unlockScaleX.value
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
+            },
         contentAlignment = Alignment.Center
     ) {
+        // Outline sutil de estrellitas orbitando el perímetro
+        StarOrbitOutline(
+            pillWidth = width,
+            pillHeight = height,
+            corner = corner
+        )
+
         if (glowColor != Color.Transparent) {
             Box(
                 modifier = Modifier
@@ -566,3 +602,113 @@ private fun ProgressBar(progress: Float) {
         drawRoundRect(color = Color.White, cornerRadius = CornerRadius(4f, 4f), size = Size(size.width * animProgress, size.height))
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+//  OUTLINE DE ESTRELLITAS ORBITANDO EL BORDE (Difuminadas y sutiles)
+// ═══════════════════════════════════════════════════════════════════════
+private data class StarParticle(
+    val offset: Float,
+    val speedMultiplier: Float,
+    val radiusDp: Float,
+    val glowRadiusDp: Float,
+    val baseAlpha: Float
+)
+
+private val starParticles = listOf(
+    StarParticle(offset = 0.00f, speedMultiplier = 1.00f, radiusDp = 1.2f, glowRadiusDp = 3.5f, baseAlpha = 0.9f),
+    StarParticle(offset = 0.07f, speedMultiplier = 1.05f, radiusDp = 0.8f, glowRadiusDp = 2.5f, baseAlpha = 0.6f),
+    StarParticle(offset = 0.14f, speedMultiplier = 0.95f, radiusDp = 1.6f, glowRadiusDp = 4.5f, baseAlpha = 0.95f),
+    StarParticle(offset = 0.21f, speedMultiplier = 1.02f, radiusDp = 1.0f, glowRadiusDp = 3.0f, baseAlpha = 0.7f),
+    StarParticle(offset = 0.28f, speedMultiplier = 0.98f, radiusDp = 1.4f, glowRadiusDp = 4.0f, baseAlpha = 0.85f),
+    StarParticle(offset = 0.35f, speedMultiplier = 1.08f, radiusDp = 0.9f, glowRadiusDp = 2.8f, baseAlpha = 0.65f),
+    StarParticle(offset = 0.42f, speedMultiplier = 0.92f, radiusDp = 1.7f, glowRadiusDp = 5.0f, baseAlpha = 0.9f),
+    StarParticle(offset = 0.49f, speedMultiplier = 1.03f, radiusDp = 1.1f, glowRadiusDp = 3.2f, baseAlpha = 0.75f),
+    StarParticle(offset = 0.56f, speedMultiplier = 0.97f, radiusDp = 1.5f, glowRadiusDp = 4.2f, baseAlpha = 0.85f),
+    StarParticle(offset = 0.63f, speedMultiplier = 1.06f, radiusDp = 0.8f, glowRadiusDp = 2.6f, baseAlpha = 0.6f),
+    StarParticle(offset = 0.70f, speedMultiplier = 0.94f, radiusDp = 1.8f, glowRadiusDp = 5.2f, baseAlpha = 1.0f),
+    StarParticle(offset = 0.77f, speedMultiplier = 1.04f, radiusDp = 1.0f, glowRadiusDp = 3.0f, baseAlpha = 0.7f),
+    StarParticle(offset = 0.84f, speedMultiplier = 0.96f, radiusDp = 1.3f, glowRadiusDp = 3.8f, baseAlpha = 0.8f),
+    StarParticle(offset = 0.91f, speedMultiplier = 1.02f, radiusDp = 0.9f, glowRadiusDp = 2.7f, baseAlpha = 0.65f),
+    StarParticle(offset = 0.96f, speedMultiplier = 0.99f, radiusDp = 1.4f, glowRadiusDp = 4.0f, baseAlpha = 0.85f)
+)
+
+@Composable
+private fun StarOrbitOutline(
+    pillWidth: Dp,
+    pillHeight: Dp,
+    corner: Dp
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "stars")
+    val orbitProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "orbit"
+    )
+    val twinkle by infiniteTransition.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "twinkle"
+    )
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val pillWidthPx = with(density) { pillWidth.toPx() }
+    val pillHeightPx = with(density) { pillHeight.toPx() }
+    val cornerPx = with(density) { corner.toPx() }
+
+    Canvas(modifier = Modifier.size(pillWidth + 24.dp, pillHeight + 24.dp)) {
+        val left = (size.width - pillWidthPx) / 2f
+        val top = (size.height - pillHeightPx) / 2f
+        val rect = android.graphics.RectF(left, top, left + pillWidthPx, top + pillHeightPx)
+        val androidPath = android.graphics.Path().apply {
+            addRoundRect(rect, cornerPx, cornerPx, android.graphics.Path.Direction.CW)
+        }
+        val measure = android.graphics.PathMeasure(androidPath, true)
+        val length = measure.length
+
+        if (length > 0f) {
+            val pos = floatArrayOf(0f, 0f)
+
+            // Trazo cósmico tenue para dar continuidad al outline
+            drawRoundRect(
+                color = Color(0x12FFFFFF),
+                topLeft = Offset(left, top),
+                size = Size(pillWidthPx, pillHeightPx),
+                cornerRadius = CornerRadius(cornerPx, cornerPx),
+                style = Stroke(width = 0.75.dp.toPx())
+            )
+
+            starParticles.forEach { star ->
+                val rawProg = (orbitProgress * star.speedMultiplier + star.offset) % 1f
+                val progress = if (rawProg < 0f) rawProg + 1f else rawProg
+                measure.getPosTan(progress * length, pos, null)
+                val center = Offset(pos[0], pos[1])
+
+                val starAlpha = (star.baseAlpha * twinkle).coerceIn(0.15f, 1f)
+                val glowRadius = star.glowRadiusDp.dp.toPx() * twinkle
+                val starRadius = star.radiusDp.dp.toPx()
+
+                // Glow difuminado exterior
+                drawCircle(
+                    color = Color(0x35D0E2FF),
+                    radius = glowRadius,
+                    center = center
+                )
+                // Núcleo brillante de la estrella
+                drawCircle(
+                    color = Color.White.copy(alpha = starAlpha),
+                    radius = starRadius,
+                    center = center
+                )
+            }
+        }
+    }
+}
+
