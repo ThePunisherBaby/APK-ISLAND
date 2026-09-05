@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -633,16 +634,17 @@ private fun ProgressBar(progress: Float) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  AURA CROMÁTICA GEMINI (Reactiva a giroscopio y 120Hz nativos)
+//  AURA CROMÁTICA GEMINI CLÁSICA (Google Multicolor, Giroscopio y 120Hz)
 // ═══════════════════════════════════════════════════════════════════════
-private val GeminiGradientColors = listOf(
-    Color(0xFF1B68FF), // Azul Eléctrico Cósmico
-    Color(0xFF00E5FF), // Cian Neón
-    Color(0xFF7F56D9), // Índigo Profundo
-    Color(0xFFC75AF6), // Violeta Gemini
-    Color(0xFFFF6270), // Coral Cálido
-    Color(0xFFFFB340), // Ámbar Dorado
-    Color(0xFF1B68FF)  // Cierre seamless continuo
+private val GeminiClassicColorsInt = intArrayOf(
+    0xFF4285F4.toInt(), // Google Blue
+    0xFF00E5FF.toInt(), // Electric Cyan
+    0xFF34A853.toInt(), // Google Green
+    0xFFFBBC05.toInt(), // Google Yellow
+    0xFFFF6D00.toInt(), // Warm Orange
+    0xFFEA4335.toInt(), // Google Red
+    0xFF9C27B0.toInt(), // Gemini Violet
+    0xFF4285F4.toInt()  // Cierre seamless continuo
 )
 
 @Composable
@@ -662,43 +664,48 @@ private fun GeminiChromaticAura(
         val top = (size.height - pillHeightPx) / 2f
         val pillCenter = Offset(left + pillWidthPx / 2f, top + pillHeightPx / 2f)
 
-        val sweepBrush = Brush.sweepGradient(
-            colors = GeminiGradientColors,
-            center = pillCenter
+        // Matriz de sombreador interna: los colores giran alrededor del centro
+        // pero la geometría de la píldora se mantiene 100% HORIZONTAL (¡sin inclinarse en diagonal!)
+        val sweepShader = android.graphics.SweepGradient(
+            pillCenter.x,
+            pillCenter.y,
+            GeminiClassicColorsInt,
+            null
+        )
+        val matrix = android.graphics.Matrix()
+        matrix.setRotate(rotationAngle, pillCenter.x, pillCenter.y)
+        sweepShader.setLocalMatrix(matrix)
+        val sweepBrush = ShaderBrush(sweepShader)
+
+        // 1. Resplandor difuso que emana de ATRÁS del notch (Halo exterior amplio)
+        drawRoundRect(
+            brush = sweepBrush,
+            topLeft = Offset(left - 3.5.dp.toPx(), top - 3.5.dp.toPx()),
+            size = Size(pillWidthPx + 7.dp.toPx(), pillHeightPx + 7.dp.toPx()),
+            cornerRadius = CornerRadius(cornerPx + 3.5.dp.toPx(), cornerPx + 3.5.dp.toPx()),
+            style = Stroke(width = 7.dp.toPx()),
+            alpha = 0.35f
         )
 
-        // Rotación ultra fluida a 120Hz gobernada por el giroscopio
-        rotate(degrees = rotationAngle, pivot = pillCenter) {
-            // 1. Halo difuminado amplio (Resplandor que baña el cristal del Pixel 8)
-            drawRoundRect(
-                brush = sweepBrush,
-                topLeft = Offset(left - 2.dp.toPx(), top - 2.dp.toPx()),
-                size = Size(pillWidthPx + 4.dp.toPx(), pillHeightPx + 4.dp.toPx()),
-                cornerRadius = CornerRadius(cornerPx + 2.dp.toPx(), cornerPx + 2.dp.toPx()),
-                style = Stroke(width = 5.5.dp.toPx()),
-                alpha = 0.40f
-            )
+        // 2. Capa intermedia cromática que brota del borde
+        drawRoundRect(
+            brush = sweepBrush,
+            topLeft = Offset(left - 1.5.dp.toPx(), top - 1.5.dp.toPx()),
+            size = Size(pillWidthPx + 3.dp.toPx(), pillHeightPx + 3.dp.toPx()),
+            cornerRadius = CornerRadius(cornerPx + 1.5.dp.toPx(), cornerPx + 1.5.dp.toPx()),
+            style = Stroke(width = 3.5.dp.toPx()),
+            alpha = 0.65f
+        )
 
-            // 2. Capa intermedia de aura cromática
-            drawRoundRect(
-                brush = sweepBrush,
-                topLeft = Offset(left - 1.dp.toPx(), top - 1.dp.toPx()),
-                size = Size(pillWidthPx + 2.dp.toPx(), pillHeightPx + 2.dp.toPx()),
-                cornerRadius = CornerRadius(cornerPx + 1.dp.toPx(), cornerPx + 1.dp.toPx()),
-                style = Stroke(width = 2.8.dp.toPx()),
-                alpha = 0.70f
-            )
-
-            // 3. Filo neón nítido al ras del notch
-            drawRoundRect(
-                brush = sweepBrush,
-                topLeft = Offset(left, top),
-                size = Size(pillWidthPx, pillHeightPx),
-                cornerRadius = CornerRadius(cornerPx, cornerPx),
-                style = Stroke(width = 1.4.dp.toPx()),
-                alpha = 0.95f
-            )
-        }
+        // 3. Contorno neón nítido al ras del notch horizontal
+        drawRoundRect(
+            brush = sweepBrush,
+            topLeft = Offset(left, top),
+            size = Size(pillWidthPx, pillHeightPx),
+            cornerRadius = CornerRadius(cornerPx, cornerPx),
+            style = Stroke(width = 1.8.dp.toPx()),
+            alpha = 0.95f
+        )
     }
 }
 
