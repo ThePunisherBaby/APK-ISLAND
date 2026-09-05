@@ -9,6 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.PixelFormat
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -36,6 +40,8 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
 
     private lateinit var windowManager: WindowManager
     private var composeView: ComposeView? = null
+    private var sensorManager: SensorManager? = null
+    private var gyroSensor: Sensor? = null
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
@@ -47,11 +53,46 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
     override val viewModelStore: ViewModelStore
         get() = store
 
+    private val gyroListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent?) {
+            if (event?.sensor?.type == Sensor.TYPE_GYROSCOPE) {
+                // Rotación lateral (roll) y rotación sobre la pantalla (yaw)
+                val roll = event.values[1]
+                val yaw = event.values[2]
+                IslandStateHolder.gyroBias = roll * 0.7f + yaw * 0.8f
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    private fun startGyro() {
+        gyroSensor?.let {
+            sensorManager?.registerListener(gyroListener, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+    }
+
+    private fun stopGyro() {
+        try {
+            sensorManager?.unregisterListener(gyroListener)
+        } catch (e: Exception) {
+            // Ignorar
+        }
+    }
 
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_USER_PRESENT || intent?.action == Intent.ACTION_SCREEN_ON) {
-                IslandStateHolder.triggerUnlock()
+            when (intent?.action) {
+                Intent.ACTION_USER_PRESENT -> {
+                    IslandStateHolder.triggerUnlock()
+                    startGyro()
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    startGyro()
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    stopGyro()
+                }
             }
         }
     }
@@ -62,11 +103,16 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        gyroSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        startGyro()
+
         startForegroundNotification()
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
         }
         registerReceiver(unlockReceiver, filter)
 
@@ -142,6 +188,21 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             y = offsetY
+
+            // Forzar tasa de refresco a 120Hz nativos en el panel del Pixel 8
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                preferredRefreshRate = 120f
+                try {
+                    @Suppress("DEPRECATION")
+                    val display = windowManager.defaultDisplay
+                    val mode120 = display?.supportedModes?.find { it.refreshRate >= 119f }
+                    if (mode120 != null) {
+                        preferredDisplayModeId = mode120.modeId
+                    }
+                } catch (e: Exception) {
+                    // Fallback a preferredRefreshRate
+                }
+            }
         }
 
         windowManager.addView(cv, params)
@@ -149,6 +210,7 @@ class DynamicIslandService : Service(), SavedStateRegistryOwner, ViewModelStoreO
 
     override fun onDestroy() {
         super.onDestroy()
+        stopGyro()
         try {
             unregisterReceiver(unlockReceiver)
         } catch (e: Exception) {

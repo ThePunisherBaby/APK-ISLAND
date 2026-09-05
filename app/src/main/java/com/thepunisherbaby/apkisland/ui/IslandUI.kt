@@ -23,12 +23,14 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -95,6 +97,7 @@ object IslandStateHolder {
     var timerData by mutableStateOf(IslandTimerData())
     var currentArtwork by mutableStateOf<android.graphics.Bitmap?>(null)
     var unlockTrigger by mutableLongStateOf(0L)
+    var gyroBias by mutableFloatStateOf(0f)
 
     fun triggerUnlock() {
         unlockTrigger = System.currentTimeMillis()
@@ -186,6 +189,31 @@ fun IslandUI() {
         label = "glow"
     )
 
+    // Rotación fluida a 120Hz gobernada por física de giroscopio
+    var auraRotation by remember { mutableFloatStateOf(0f) }
+    var smoothGyro by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        var lastTime = System.nanoTime()
+        while (true) {
+            withFrameNanos { now ->
+                val dt = ((now - lastTime) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
+                lastTime = now
+
+                // Suavizado del giroscopio para respuesta táctil orgánica
+                val targetGyro = IslandStateHolder.gyroBias
+                smoothGyro += (targetGyro - smoothGyro) * 0.18f
+
+                // En reposo: gira en sentido de las agujas del reloj (~45°/s).
+                // Al inclinar a la izquierda (smoothGyro < 0): invierte la rotación en ese sentido.
+                // Al inclinar a la derecha (smoothGyro > 0): acelera en sentido horario.
+                val speed = 45f + (smoothGyro * 220f)
+                auraRotation = (auraRotation + speed * dt) % 360f
+                if (auraRotation < 0f) auraRotation += 360f
+            }
+        }
+    }
+
     // Animación elástica horizontal (0 a 100) al desbloquear desde la cámara
     val unlockScaleX = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -216,11 +244,12 @@ fun IslandUI() {
             },
         contentAlignment = Alignment.Center
     ) {
-        // Outline sutil de estrellitas orbitando el perímetro
-        StarOrbitOutline(
+        // Aura Cromática Gemini fluida y reactiva al giroscopio
+        GeminiChromaticAura(
             pillWidth = width,
             pillHeight = height,
-            corner = corner
+            corner = corner,
+            rotationAngle = auraRotation
         )
 
         if (glowColor != Color.Transparent) {
@@ -604,60 +633,25 @@ private fun ProgressBar(progress: Float) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  OUTLINE DE ESTRELLITAS ORBITANDO EL BORDE (Difuminadas y sutiles)
+//  AURA CROMÁTICA GEMINI (Reactiva a giroscopio y 120Hz nativos)
 // ═══════════════════════════════════════════════════════════════════════
-private data class StarParticle(
-    val offset: Float,
-    val speedMultiplier: Float,
-    val radiusDp: Float,
-    val glowRadiusDp: Float,
-    val baseAlpha: Float
-)
-
-private val starParticles = listOf(
-    StarParticle(offset = 0.00f, speedMultiplier = 1.00f, radiusDp = 1.2f, glowRadiusDp = 3.5f, baseAlpha = 0.9f),
-    StarParticle(offset = 0.07f, speedMultiplier = 1.05f, radiusDp = 0.8f, glowRadiusDp = 2.5f, baseAlpha = 0.6f),
-    StarParticle(offset = 0.14f, speedMultiplier = 0.95f, radiusDp = 1.6f, glowRadiusDp = 4.5f, baseAlpha = 0.95f),
-    StarParticle(offset = 0.21f, speedMultiplier = 1.02f, radiusDp = 1.0f, glowRadiusDp = 3.0f, baseAlpha = 0.7f),
-    StarParticle(offset = 0.28f, speedMultiplier = 0.98f, radiusDp = 1.4f, glowRadiusDp = 4.0f, baseAlpha = 0.85f),
-    StarParticle(offset = 0.35f, speedMultiplier = 1.08f, radiusDp = 0.9f, glowRadiusDp = 2.8f, baseAlpha = 0.65f),
-    StarParticle(offset = 0.42f, speedMultiplier = 0.92f, radiusDp = 1.7f, glowRadiusDp = 5.0f, baseAlpha = 0.9f),
-    StarParticle(offset = 0.49f, speedMultiplier = 1.03f, radiusDp = 1.1f, glowRadiusDp = 3.2f, baseAlpha = 0.75f),
-    StarParticle(offset = 0.56f, speedMultiplier = 0.97f, radiusDp = 1.5f, glowRadiusDp = 4.2f, baseAlpha = 0.85f),
-    StarParticle(offset = 0.63f, speedMultiplier = 1.06f, radiusDp = 0.8f, glowRadiusDp = 2.6f, baseAlpha = 0.6f),
-    StarParticle(offset = 0.70f, speedMultiplier = 0.94f, radiusDp = 1.8f, glowRadiusDp = 5.2f, baseAlpha = 1.0f),
-    StarParticle(offset = 0.77f, speedMultiplier = 1.04f, radiusDp = 1.0f, glowRadiusDp = 3.0f, baseAlpha = 0.7f),
-    StarParticle(offset = 0.84f, speedMultiplier = 0.96f, radiusDp = 1.3f, glowRadiusDp = 3.8f, baseAlpha = 0.8f),
-    StarParticle(offset = 0.91f, speedMultiplier = 1.02f, radiusDp = 0.9f, glowRadiusDp = 2.7f, baseAlpha = 0.65f),
-    StarParticle(offset = 0.96f, speedMultiplier = 0.99f, radiusDp = 1.4f, glowRadiusDp = 4.0f, baseAlpha = 0.85f)
+private val GeminiGradientColors = listOf(
+    Color(0xFF1B68FF), // Azul Eléctrico Cósmico
+    Color(0xFF00E5FF), // Cian Neón
+    Color(0xFF7F56D9), // Índigo Profundo
+    Color(0xFFC75AF6), // Violeta Gemini
+    Color(0xFFFF6270), // Coral Cálido
+    Color(0xFFFFB340), // Ámbar Dorado
+    Color(0xFF1B68FF)  // Cierre seamless continuo
 )
 
 @Composable
-private fun StarOrbitOutline(
+private fun GeminiChromaticAura(
     pillWidth: Dp,
     pillHeight: Dp,
-    corner: Dp
+    corner: Dp,
+    rotationAngle: Float
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "stars")
-    val orbitProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(8500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "orbit"
-    )
-    val twinkle by infiniteTransition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "twinkle"
-    )
-
     val density = androidx.compose.ui.platform.LocalDensity.current
     val pillWidthPx = with(density) { pillWidth.toPx() }
     val pillHeightPx = with(density) { pillHeight.toPx() }
@@ -666,48 +660,44 @@ private fun StarOrbitOutline(
     Canvas(modifier = Modifier.size(pillWidth + 24.dp, pillHeight + 24.dp)) {
         val left = (size.width - pillWidthPx) / 2f
         val top = (size.height - pillHeightPx) / 2f
-        val rect = android.graphics.RectF(left, top, left + pillWidthPx, top + pillHeightPx)
-        val androidPath = android.graphics.Path().apply {
-            addRoundRect(rect, cornerPx, cornerPx, android.graphics.Path.Direction.CW)
-        }
-        val measure = android.graphics.PathMeasure(androidPath, true)
-        val length = measure.length
+        val pillCenter = Offset(left + pillWidthPx / 2f, top + pillHeightPx / 2f)
 
-        if (length > 0f) {
-            val pos = floatArrayOf(0f, 0f)
+        val sweepBrush = Brush.sweepGradient(
+            colors = GeminiGradientColors,
+            center = pillCenter
+        )
 
-            // Trazo cósmico tenue para dar continuidad al outline
+        // Rotación ultra fluida a 120Hz gobernada por el giroscopio
+        rotate(degrees = rotationAngle, pivot = pillCenter) {
+            // 1. Halo difuminado amplio (Resplandor que baña el cristal del Pixel 8)
             drawRoundRect(
-                color = Color(0x12FFFFFF),
+                brush = sweepBrush,
+                topLeft = Offset(left - 2.dp.toPx(), top - 2.dp.toPx()),
+                size = Size(pillWidthPx + 4.dp.toPx(), pillHeightPx + 4.dp.toPx()),
+                cornerRadius = CornerRadius(cornerPx + 2.dp.toPx(), cornerPx + 2.dp.toPx()),
+                style = Stroke(width = 5.5.dp.toPx()),
+                alpha = 0.40f
+            )
+
+            // 2. Capa intermedia de aura cromática
+            drawRoundRect(
+                brush = sweepBrush,
+                topLeft = Offset(left - 1.dp.toPx(), top - 1.dp.toPx()),
+                size = Size(pillWidthPx + 2.dp.toPx(), pillHeightPx + 2.dp.toPx()),
+                cornerRadius = CornerRadius(cornerPx + 1.dp.toPx(), cornerPx + 1.dp.toPx()),
+                style = Stroke(width = 2.8.dp.toPx()),
+                alpha = 0.70f
+            )
+
+            // 3. Filo neón nítido al ras del notch
+            drawRoundRect(
+                brush = sweepBrush,
                 topLeft = Offset(left, top),
                 size = Size(pillWidthPx, pillHeightPx),
                 cornerRadius = CornerRadius(cornerPx, cornerPx),
-                style = Stroke(width = 0.75.dp.toPx())
+                style = Stroke(width = 1.4.dp.toPx()),
+                alpha = 0.95f
             )
-
-            starParticles.forEach { star ->
-                val rawProg = (orbitProgress * star.speedMultiplier + star.offset) % 1f
-                val progress = if (rawProg < 0f) rawProg + 1f else rawProg
-                measure.getPosTan(progress * length, pos, null)
-                val center = Offset(pos[0], pos[1])
-
-                val starAlpha = (star.baseAlpha * twinkle).coerceIn(0.15f, 1f)
-                val glowRadius = star.glowRadiusDp.dp.toPx() * twinkle
-                val starRadius = star.radiusDp.dp.toPx()
-
-                // Glow difuminado exterior
-                drawCircle(
-                    color = Color(0x35D0E2FF),
-                    radius = glowRadius,
-                    center = center
-                )
-                // Núcleo brillante de la estrella
-                drawCircle(
-                    color = Color.White.copy(alpha = starAlpha),
-                    radius = starRadius,
-                    center = center
-                )
-            }
         }
     }
 }
